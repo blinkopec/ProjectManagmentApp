@@ -1,12 +1,14 @@
 from django.shortcuts import render
 from rest_framework import generics
 from .models import User, StatusTask, UserRole, UserBoard,Board,Comment,Block,Task
-from .serializers import  UserSerializer, StatusTaskSerializer, UserRoleSerializer, UserBoardSerializer, BoardSerializer,CommentSerializer,BlockSerializer,TaskSerializer,ExtUserSerializer
+from .serializers import  (UserSerializer, StatusTaskSerializer, UserRoleSerializer, UserBoardSerializer,
+         BoardSerializer,CommentSerializer,BlockSerializer,TaskSerializer,ExtUserSerializer, UpdateUserSerializer)
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.response import Response
 from django.http import JsonResponse
 from rest_framework import permissions, status
-from .permissions import IsAdminOrReadOnly, IsOwnerOrReadOnly, IsUserOrReadOnly, IsUserRelateToBoardOrReadOnly, IsUserRelateToBlockOrReadOnly, IsUserRelateToTaskOrReadOnly
+from .permissions import (IsAdminOrReadOnly, IsOwnerOrReadOnly,
+        IsUserOrReadOnly, IsUserRelateToBoardOrReadOnly, IsUserRelateToBlockOrReadOnly, IsUserRelateToTaskOrReadOnly)
 
 
 # User
@@ -20,13 +22,15 @@ class UserAPIView(ModelViewSet):
         user = request.user
         usr = self.queryset.get(id=pk)
         
+       
         if user.id == usr.id:
             serializer = UserSerializer(usr)
             return Response(serializer.data)
-        
+
         if user.is_superuser:
             serializer = UserSerializer(usr)
             return Response(serializer.data)
+
 
         serializer = ExtUserSerializer(usr)
         return Response(serializer.data)
@@ -34,6 +38,29 @@ class UserAPIView(ModelViewSet):
     def list(self, request):
         serializer = ExtUserSerializer(self.queryset, many=True)
         return Response(serializer.data)
+
+    # чтобы пользователь не мог сделать себя админом
+    def update(self, request, pk=None,*args,**kwargs):
+        serializer = UpdateUserSerializer(request.user, data=request.data)
+        if serializer.is_valid():
+            self.perform_update(serializer)
+            return Response(status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def create(self,request,*args,**kwargs):
+        serializer = UserSerializer(data=request.data)
+
+        if request.user.is_superuser == False:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+
+        if serializer.is_valid():
+            self.perform_create(serializer)
+            headers = self.get_success_headers(serializer.data)
+            return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def perform_create(self, serializer):
+        serializer.save()
 
 # StatusTask
 class StatusTaskAPIView(ModelViewSet):

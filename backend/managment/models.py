@@ -2,8 +2,6 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 
 
-
-
 class User(AbstractUser):
     id = models.AutoField(primary_key=True)
     password = models.CharField(max_length=128)
@@ -14,11 +12,9 @@ class User(AbstractUser):
     last_name = models.CharField(max_length=150)
     email = models.CharField(max_length=254)
     is_staff = models.BooleanField()
-    is_active = models.BooleanField(null=True)
+    is_active = models.BooleanField(default=True)
     date_joined = models.DateTimeField(null=True)
    
-    # class Meta:
-        # db_table = 'auth_user'
 
 class Block(models.Model):
     id = models.AutoField(primary_key=True)

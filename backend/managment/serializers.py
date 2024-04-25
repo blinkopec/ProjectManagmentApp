@@ -40,6 +40,11 @@ class ExtUserSerializer(serializers.ModelSerializer):
         model = User
         fields = ('id', 'username', 'first_name', 'last_name', 'email', 'boards', 'comments')
 
+class UpdateUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('username' , 'first_name', 'last_name', 'email')
+
 class UserSerializer(serializers.ModelSerializer):
     boards = UserBoardSerializer(many=True, fields=['id_board', 'id_user_role'], required=False)
     comments = serializers.PrimaryKeyRelatedField(many=True, read_only=True, required=False)
