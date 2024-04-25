@@ -9,7 +9,7 @@ from django.http import JsonResponse
 from rest_framework import permissions, status
 from .permissions import (IsAdminOrReadOnly, IsOwnerOrReadOnly,
         IsUserOrReadOnly, IsUserRelateToBoardOrReadOnly, IsUserRelateToBlockOrReadOnly, IsUserRelateToTaskOrReadOnly)
-
+from django.contrib.auth.hashers import make_password
 
 # User
 class UserAPIView(ModelViewSet):
@@ -41,12 +41,41 @@ class UserAPIView(ModelViewSet):
 
     # чтобы пользователь не мог сделать себя админом
     def update(self, request, pk=None,*args,**kwargs):
-        serializer = UpdateUserSerializer(request.user, data=request.data)
-        if serializer.is_valid():
-            self.perform_update(serializer)
-            return Response(status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+        user = request.user
+        usr = self.queryset.get(id=pk)
+        if user.id != usr.id and user.is_superuser == False:
+            return Response('access denied',status=status.HTTP_403_FORBIDDEN)
+        
+        if request.method == 'PATCH':
+
+            if user.is_superuser:
+                serializer = UserSerializer(usr, data=request.data, partial=True)
+                if serializer.is_valid(raise_exception=True):
+                    serializer.save()
+                    return Response(serializer.data, status=status.HTTP_200_OK)
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+            serializer = UpdateUserSerializer(user, data=request.data, partial=True)
+            if serializer.is_valid(raise_exception=True):
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        if request.method == 'PUT':
+            if user.is_superuser:
+                request.data['password'] = make_password(request.data['password']) 
+                serializer = UserSerializer(usr, data=request.data)
+                if serializer.is_valid(raise_exception=True):
+                    serializer.save()
+                    return Response(serializer.data, status=status.HTTP_200_OK)
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            serializer = UpdateUserSerializer(user, data=request.data)
+            if serializer.is_valid(raise_exception=True):
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+
     def create(self,request,*args,**kwargs):
         serializer = UserSerializer(data=request.data)
 

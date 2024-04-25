@@ -3,6 +3,10 @@ from .models import User
 from rest_framework import status
 from rest_framework.reverse import reverse
 
+from django.http import Http404 # для закрытия не сделанных тестов (УБРАТЬ)
+
+
+
 factory = APIRequestFactory()
 
 class JWTTest(APITestCase):
@@ -132,7 +136,7 @@ class UserTest(APITestCase):
         self.assertContains(resp, 'password')
 
     # Пользователь может обновить информацию о себе
-    def test_user_update_info(self):
+    def test_user_update_info_patch(self):
         url = '/auth/jwt/create/'
         username = 'test'
         email = 'test@test.ru'
@@ -146,17 +150,67 @@ class UserTest(APITestCase):
         client = APIClient()
         client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
 
-        resp = self.client.put('/api/users/' + str(usr.id) + '/', {
-            "username": "abc",
-            "password": usr.password,
-            "is_superuser": usr.is_superuser,
-            "first_name": usr.first_name,
-            "last_name": usr.last_name,
-            "email": usr.email,
-            "is_staff": usr.is_staff
+        resp = client.patch('/api/users/' + str(usr.id) + '/', {
+            "username": "abc"
         })
 
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    # Пользователь может полностью обновить информацию о себе
+    def test_user_update_info_put(self):
+        raise Http404
+
+    # Пользователь не может обновлять не свои данные методом put 
+    def test_user_update_someone_user_info_put(self):
+        raise Http404
+
+    # Пользователь не может сделать себя админом (is_superuser = True)
+    def test_user_update_is_superuser(self):
+        raise Http404
+
+    # Пользователь не может обновлять не свои данные методом patch
+    def test_user_update_someone_user_info_patch(self):
+        url = '/auth/jwt/create/'
+        username = 'test'
+        email = 'test@test.ru'
+        password = 'test'
+        usr = User.objects.create_user(username=username,email=email,password=password)
+        usr.save()
+
+        resp = self.client.post(url, {'username':username, 'password':password}, format='json')
+        token = resp.data['access']
+
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
+
+        usr2 = User.objects.create_user(username='test2',email='test2@test.ru',password='test2')
+        usr.save()
+
+        resp = client.patch('/api/users/' + str(usr2.id) + '/', {
+            "username": "abc"
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    # Супер пользователь обновляет информацию о себе методом put
+    def test_superuser_update_info_put(self):
+        raise Http404
+
+    # Супер пользователь обновляет информацию о себе методом patch
+    def test_superuser_update_info_patch(self):
+        raise Http404
+
+    # Супер пользователь обновляет чужую информацию методом put
+    def test_superuser_update_someone_user_info_put(self):
+        raise Http404
+
+    # Супер пользователь обновляет чужую информацию методом patch
+    def test_superuser_update_someone_user_info_patch(self):
+        raise Http404
+
+    # Супер пользователь может менять пароли любых пользователей
+    def test_superuser_change_someone_user_password(self):
+        raise Http404
 
     # Обычный пользователь не может создавать новых пользователей
     def test_user_create_users(self):
@@ -230,5 +284,5 @@ class StatusTaskTests(APITestCase):
     
     # супер пользователь должен иметь дсотуп к PUT и DELETE
     def test_api_status_task_superuser(self):
-        pass
+        raise Http404
 

@@ -1,7 +1,6 @@
 from rest_framework import serializers
 from .models import  User, StatusTask, UserRole, UserBoard, Board, Comment,Block,Task
 
-
 class DynamicFieldsCategorySerializer(serializers.ModelSerializer):
     def __init__(self, *args, **kwargs):
         fields = kwargs.pop('fields', None)
@@ -40,10 +39,25 @@ class ExtUserSerializer(serializers.ModelSerializer):
         model = User
         fields = ('id', 'username', 'first_name', 'last_name', 'email', 'boards', 'comments')
 
-class UpdateUserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ('username' , 'first_name', 'last_name', 'email')
+# Сериалайзер для обновления данных пользователя о себе
+class UpdateUserSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=150)
+    first_name = serializers.CharField(max_length=150)
+    last_name = serializers.CharField(max_length=150)
+    email = serializers.CharField( max_length=254)
+    def update(self, instance, validated_data):
+        instance.email = validated_data.get('email', instance.email)
+        instance.first_name = validated_data.get('first_name', instance.first_name)
+        instance.last_name = validated_data.get('last_name', instance.last_name)
+        instance.username = validated_data.get('username', instance.username)
+        instance.save()
+        return instance
+    
+    def validate(self, data):
+        if ('email' not in data and 'first_name' not in data and
+             'last_name' not in data and 'username' not in data):
+            raise serializers.ValidationError('No fields to update')
+        return data
 
 class UserSerializer(serializers.ModelSerializer):
     boards = UserBoardSerializer(many=True, fields=['id_board', 'id_user_role'], required=False)
@@ -51,7 +65,14 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ('id', 'password', 'last_login', 'is_superuser', 'username', 'first_name', 'last_name', 'email', 'date_joined', 'is_active', 'is_staff', 'boards', 'comments')
-
+    def validate(self,data):
+        if ('password' not in data and 'last_login' not in data and
+             'is_superuser' not in data and 'is_staff' not in data and
+             'is_active' not in data and 'date_joined' not in data and 
+             'last_name' not in data and 'first_name' not in data and
+             'username' not in data and 'email' not in data):
+            raise serializers.ValidationError('No fields to update')
+        return data
 
 class TaskSerializer(serializers.ModelSerializer):
     comments = serializers.PrimaryKeyRelatedField(many=True, read_only=True, required=False)
