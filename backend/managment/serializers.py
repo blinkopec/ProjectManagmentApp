@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import  User, StatusTask, UserRole, UserBoard, Board, Comment,Block,Task
+from django.contrib.auth.hashers import make_password
 
 class DynamicFieldsCategorySerializer(serializers.ModelSerializer):
     def __init__(self, *args, **kwargs):
@@ -72,6 +73,9 @@ class UserSerializer(serializers.ModelSerializer):
              'last_name' not in data and 'first_name' not in data and
              'username' not in data and 'email' not in data):
             raise serializers.ValidationError('No fields to update')
+        
+        if 'password' in data:
+            data['password'] = make_password(data['password'])
         return data
 
 class TaskSerializer(serializers.ModelSerializer):
@@ -98,5 +102,7 @@ class StatusTaskSerializer(serializers.ModelSerializer):
 class UserRoleSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserRole
-        fields = ('id','name')
+        fields = ('id','name', 'commenting', 'deleting_board', 'creating_task', 'editing_task', 'deleting_task',
+            'creating_block', 'editing_block', 'deleting_block', 'creating_status_task', 'editing_status_task', 'deleting_status_task',
+            'creating_role', 'editing_role', 'deleting_role')
 

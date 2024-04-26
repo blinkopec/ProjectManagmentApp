@@ -8,7 +8,8 @@ from rest_framework.response import Response
 from django.http import JsonResponse
 from rest_framework import permissions, status
 from .permissions import (IsAdminOrReadOnly, IsOwnerOrReadOnly,
-        IsUserOrReadOnly, IsUserRelateToBoardOrReadOnly, IsUserRelateToBlockOrReadOnly, IsUserRelateToTaskOrReadOnly)
+        IsUserOrReadOnly, IsUserRelateToBoardOrReadOnly, IsUserRelateToBlockOrReadOnly, IsUserRelateToTaskOrReadOnly,
+        IsUserCanEditingTaskOrReadOnly)
 from django.contrib.auth.hashers import make_password
 
 # User
@@ -63,7 +64,7 @@ class UserAPIView(ModelViewSet):
 
         if request.method == 'PUT':
             if user.is_superuser:
-                request.data['password'] = make_password(request.data['password']) 
+                # request.data['password'] = make_password(request.data['password']) 
                 serializer = UserSerializer(usr, data=request.data)
                 if serializer.is_valid(raise_exception=True):
                     serializer.save()
@@ -101,7 +102,31 @@ class StatusTaskAPIView(ModelViewSet):
 class UserRoleAPIView(ModelViewSet):
     queryset = UserRole.objects.all()
     serializer_class = UserRoleSerializer
-    permission_classes = [IsAdminOrReadOnly]
+    permission_classes = [IsUserCanEditingTaskOrReadOnly]
+
+    # Создавать может только пользователь с нужным разрешением или суперпользователь с проверкой досок
+    def create(self, request):
+        user = request.user
+        
+        if user.is_superuser :
+            serializer = UserRoleSerializer(data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        #! нужна проверка роли к определенной доске
+        
+
+    # Изменять может только пользователь с нужным разрешением или суперпользователь
+    def update(self, request, pk=None):
+        #! проверка может ли обновлять в этой доске (чекбокс в бд проверить у юзера именно у этой доски) 
+        pass
+
+    # Удалять может только пользователь с нужным разрешением или суперпользователь
+    def destroy(self, request, pk=None):
+        #! проверка доски
+        pass
 
 # UserBoard
 class UserBoardAPIView(ModelViewSet):

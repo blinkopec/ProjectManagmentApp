@@ -1,6 +1,6 @@
 from rest_framework import permissions
 from collections.abc import Iterable
-from .models import UserBoard, Block, Board
+from .models import UserBoard, Block, Board, UserRole
 
 class ReadOnly(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -12,11 +12,14 @@ class IsAdminOrReadOnly(permissions.BasePermission):
         if request.user.is_authenticated:
             return True
 
-    def has_object_permission(self, request, view):
+    def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return True
         
-        return bool(request.user and request.user.is_staff)
+        if request.user.is_staff:
+            return True
+
+        return bool(request.user and request.user.is_superuser)
 
 class IsOwnerOrReadOnly(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -90,3 +93,29 @@ class IsUserRelateToTaskOrReadOnly(permissions.BasePermission):
         
         if request.method in permissions.SAFE_METHODS:
             return True
+
+# Ограничение пользователь без разрешения на изменение создание
+# и удаление ролей не может производить действия с ролями, а только просматривать
+class IsUserCanEditingTaskOrReadOnly(permissions.BasePermission):
+    def has_permission(self, request, view):
+        if request.user.is_authenticated:
+            return True
+
+    def has_object_permission(self,request,view,obj):
+        if request.user.is_superuser:
+            return True
+
+
+        roles = UserRole.objects.filter(id__in=UserBoard.objects.all().filter(id_user=request.user.id).values_list('id_user_role', flat=True))
+
+        for role in roles:            
+            if role.creating_role:
+                return True
+            
+            if role.editing_role:
+                return True
+
+            if role.deleting_role:
+                return True    
+
+        

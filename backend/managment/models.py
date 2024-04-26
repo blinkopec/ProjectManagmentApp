@@ -52,10 +52,30 @@ class Task(models.Model):
 
 
 
-
 class UserRole(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=50)
+
+    commenting = models.BooleanField(default=True)
+
+    creating_task = models.BooleanField(default=True)
+    deleting_task = models.BooleanField(default=True)
+    editing_task = models.BooleanField(default=True)
+
+    deleting_board = models.BooleanField(default=True)
+
+    creating_block = models.BooleanField(default=True)
+    editing_block = models.BooleanField(default=True)
+    deleting_block = models.BooleanField(default=True)
+
+    creating_status_task = models.BooleanField(default=True)
+    editing_status_task = models.BooleanField(default=True)
+    deleting_status_task = models.BooleanField(default=True)
+
+    creating_role = models.BooleanField(default=False)
+    editing_role = models.BooleanField(default=False)
+    deleting_role = models.BooleanField(default=False)
+
 
 class UserBoard(models.Model):
     id = models.AutoField(primary_key=True)

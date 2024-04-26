@@ -1,5 +1,5 @@
 from rest_framework.test import APIRequestFactory, APITestCase, APIClient
-from .models import User
+from .models import User, StatusTask
 from rest_framework import status
 from rest_framework.reverse import reverse
 
@@ -158,15 +158,75 @@ class UserTest(APITestCase):
 
     # Пользователь может полностью обновить информацию о себе
     def test_user_update_info_put(self):
-        raise Http404
+        url = '/auth/jwt/create/'
+        username = 'test'
+        email = 'test@test.ru'
+        password = 'test'
+        usr = User.objects.create_user(username=username,email=email,password=password)
+        usr.save()
+
+        resp = self.client.post(url, {'username':username, 'password':password}, format='json')
+        token = resp.data['access']
+
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
+
+        resp = client.put('/api/users/' + str(usr.id) + '/', {
+            "username": "abc",
+            "last_name": "asd",
+            "first_name": "asd",
+            "email": "asd@asd.ru"
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
     # Пользователь не может обновлять не свои данные методом put 
     def test_user_update_someone_user_info_put(self):
-        raise Http404
+        url = '/auth/jwt/create/'
+        username = 'test'
+        email = 'test@test.ru'
+        password = 'test'
+        usr = User.objects.create_user(username=username,email=email,password=password)
+        usr.save()
+
+        resp = self.client.post(url, {'username':username, 'password':password}, format='json')
+        token = resp.data['access']
+
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
+
+        usr2 = User.objects.create_user(username='test2',email='test2@test.ru',password='test2')
+        usr.save()
+
+        resp = client.put('/api/users/' + str(usr2.id) + '/', {
+            "username": "abc",
+            "last_name": "asd",
+            "first_name": "asd",
+            "email": "asd@asd.ru"
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
     # Пользователь не может сделать себя админом (is_superuser = True)
     def test_user_update_is_superuser(self):
-        raise Http404
+        url = '/auth/jwt/create/'
+        username = 'test'
+        email = 'test@test.ru'
+        password = 'test'
+        usr = User.objects.create_user(username=username,email=email,password=password)
+        usr.save()
+
+        resp = self.client.post(url, {'username':username, 'password':password}, format='json')
+        token = resp.data['access']
+
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
+
+        resp = client.patch('/api/users/' + str(usr.id) + '/', {
+            "is_superuser": True
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     # Пользователь не может обновлять не свои данные методом patch
     def test_user_update_someone_user_info_patch(self):
@@ -194,23 +254,207 @@ class UserTest(APITestCase):
 
     # Супер пользователь обновляет информацию о себе методом put
     def test_superuser_update_info_put(self):
-        raise Http404
+        url = '/auth/jwt/create/'
+        username = 'test'
+        email = 'test@test.ru'
+        password = 'test'
+        usr = User.objects.create_user(username=username,email=email,password=password, is_superuser=True)
+        usr.save()
+
+        resp = self.client.post(url, {'username':username, 'password':password}, format='json')
+        token = resp.data['access']
+
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
+
+        resp = client.put('/api/users/' + str(usr.id) + '/', {
+            "username": "abc",
+            "last_name": "asd",
+            "first_name": "asd",
+            "email": "asd@asd.ru",
+            "password": "asd"
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    # Пользователь может удалить себя
+    def test_user_delete_self(self):
+        url = '/auth/jwt/create/'
+        username = 'test'
+        email = 'test@test.ru'
+        password = 'test'
+        usr = User.objects.create_user(username=username,email=email,password=password)
+        usr.save()
+
+        resp = self.client.post(url, {'username':username, 'password':password}, format='json')
+        token = resp.data['access']
+
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
+
+        resp = client.delete('/api/users/' + str(usr.id) + '/')
+
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+
+    # Пользователь не может удалять других пользователей
+    def test_user_delete_someone_user(self):
+        url = '/auth/jwt/create/'
+        username = 'test'
+        email = 'test@test.ru'
+        password = 'test'
+        usr = User.objects.create_user(username=username,email=email,password=password)
+        usr.save()
+
+        resp = self.client.post(url, {'username':username, 'password':password}, format='json')
+        token = resp.data['access']
+
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
+
+        usr2 = User.objects.create_user(username='test2',email='test2@test.ru',password='test2')
+        usr.save()
+
+        resp = client.delete('/api/users/' + str(usr2.id) + '/')
+
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    # Супер пользователь может удалять других пользователей
+    def test_superuser_delete_someone_user(self):
+        url = '/auth/jwt/create/'
+        username = 'test'
+        email = 'test@test.ru'
+        password = 'test'
+        usr = User.objects.create_user(username=username,email=email,password=password, is_superuser=True)
+        usr.save()
+
+        resp = self.client.post(url, {'username':username, 'password':password}, format='json')
+        token = resp.data['access']
+
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
+
+        usr2 = User.objects.create_user(username='test2',email='test2@test.ru',password='test2')
+        usr.save()
+
+        resp = client.delete('/api/users/' + str(usr2.id) + '/')
+
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+
+    # Супер пользователь может удалить себя
+    def test_superuser_delete_self(self):
+        url = '/auth/jwt/create/'
+        username = 'test'
+        email = 'test@test.ru'
+        password = 'test'
+        usr = User.objects.create_user(username=username,email=email,password=password, is_superuser=True)
+        usr.save()
+
+        resp = self.client.post(url, {'username':username, 'password':password}, format='json')
+        token = resp.data['access']
+
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
+
+        resp = client.delete('/api/users/' + str(usr.id) + '/')
+
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
 
     # Супер пользователь обновляет информацию о себе методом patch
     def test_superuser_update_info_patch(self):
-        raise Http404
+        url = '/auth/jwt/create/'
+        username = 'test'
+        email = 'test@test.ru'
+        password = 'test'
+        usr = User.objects.create_user(username=username,email=email,password=password, is_superuser=True)
+        usr.save()
+
+        resp = self.client.post(url, {'username':username, 'password':password}, format='json')
+        token = resp.data['access']
+
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
+
+        resp = client.patch('/api/users/' + str(usr.id) + '/', {
+            "username": "abc",
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
     # Супер пользователь обновляет чужую информацию методом put
     def test_superuser_update_someone_user_info_put(self):
-        raise Http404
+        url = '/auth/jwt/create/'
+        username = 'test'
+        email = 'test@test.ru'
+        password = 'test'
+        usr = User.objects.create_user(username=username,email=email,password=password, is_superuser=True)
+        usr.save()
+
+        resp = self.client.post(url, {'username':username, 'password':password}, format='json')
+        token = resp.data['access']
+
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
+
+        usr2 = User.objects.create_user(username='test2',email='test2@test.ru',password='test2')
+        usr.save()
+
+        resp = client.put('/api/users/' + str(usr2.id) + '/', {
+            "username": "abc",
+            "last_name": "asd",
+            "first_name": "asd",
+            "email": "asd@asd.ru",
+            "password": "asd"
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
     # Супер пользователь обновляет чужую информацию методом patch
     def test_superuser_update_someone_user_info_patch(self):
-        raise Http404
+        url = '/auth/jwt/create/'
+        username = 'test'
+        email = 'test@test.ru'
+        password = 'test'
+        usr = User.objects.create_user(username=username,email=email,password=password, is_superuser=True)
+        usr.save()
+
+        resp = self.client.post(url, {'username':username, 'password':password}, format='json')
+        token = resp.data['access']
+
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
+
+        usr2 = User.objects.create_user(username='test2',email='test2@test.ru',password='test2')
+        usr.save()
+
+        resp = client.patch('/api/users/' + str(usr2.id) + '/', {
+            "username": "abc"
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
     # Супер пользователь может менять пароли любых пользователей
     def test_superuser_change_someone_user_password(self):
-        raise Http404
+        url = '/auth/jwt/create/'
+        username = 'test'
+        email = 'test@test.ru'
+        password = 'test'
+        usr = User.objects.create_user(username=username,email=email,password=password, is_superuser=True)
+        usr.save()
+
+        resp = self.client.post(url, {'username':username, 'password':password}, format='json')
+        token = resp.data['access']
+
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
+
+        usr2 = User.objects.create_user(username='test2',email='test2@test.ru',password='test2')
+        usr.save()
+
+        resp = client.patch('/api/users/' + str(usr2.id) + '/', {
+            "password": "abc"
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
     # Обычный пользователь не может создавать новых пользователей
     def test_user_create_users(self):
@@ -282,7 +526,94 @@ class StatusTaskTests(APITestCase):
         resp = client.get('/api/status_tasks/', data={'format': 'json'})
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
     
-    # супер пользователь должен иметь дсотуп к PUT и DELETE
+    # супер пользователь иммет досутп к patch
     def test_api_status_task_superuser(self):
-        raise Http404
+        url = '/auth/jwt/create/'
+        username = 'test'
+        email = 'test@test.ru'
+        password = 'test'
+        usr = User.objects.create_user(username=username,email=email,password=password, is_superuser=True)
+        usr.save()
 
+        resp = self.client.post(url, {'username':username, 'password':password}, format='json')
+        token = resp.data['access']
+
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
+
+        st_task = StatusTask.objects.create(name="test")
+
+        resp = client.patch('/api/status_tasks/' + str(st_task.id) + '/', {
+            "name": "abc"
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+    
+    # супер пользователь иммет досутп к put
+    def test_api_status_task_superuser_put(self):
+        url = '/auth/jwt/create/'
+        username = 'test'
+        email = 'test@test.ru'
+        password = 'test'
+        usr = User.objects.create_user(username=username,email=email,password=password, is_superuser=True)
+        usr.save()
+
+        resp = self.client.post(url, {'username':username, 'password':password}, format='json')
+        token = resp.data['access']
+
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
+
+        st_task = StatusTask.objects.create(name="test")
+
+        resp = client.put('/api/status_tasks/' + str(st_task.id) + '/', {
+            "name": "abc"
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    # пользователь сотрудник (is_staff) имеет доступ к patch
+    def test_api_status_task_staff_patch(self):
+        url = '/auth/jwt/create/'
+        username = 'test'
+        email = 'test@test.ru'
+        password = 'test'
+        usr = User.objects.create_user(username=username,email=email,password=password, is_staff=True)
+        usr.save()
+
+        resp = self.client.post(url, {'username':username, 'password':password}, format='json')
+        token = resp.data['access']
+
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
+
+        st_task = StatusTask.objects.create(name="test")
+
+        resp = client.patch('/api/status_tasks/' + str(st_task.id) + '/', {
+            "name": "abc"
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    # пользователь сотрудник (is_staff) имеет доступ к put
+    def test_api_status_task_staff_put(self):
+        url = '/auth/jwt/create/'
+        username = 'test'
+        email = 'test@test.ru'
+        password = 'test'
+        usr = User.objects.create_user(username=username,email=email,password=password, is_staff=True)
+        usr.save()
+
+        resp = self.client.post(url, {'username':username, 'password':password}, format='json')
+        token = resp.data['access']
+
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
+
+        st_task = StatusTask.objects.create(name="test")
+
+        resp = client.put('/api/status_tasks/' + str(st_task.id) + '/', {
+            "name": "abc"
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK) 
