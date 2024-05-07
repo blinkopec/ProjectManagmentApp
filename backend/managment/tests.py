@@ -1,49 +1,40 @@
+from django.contrib.auth.base_user import password_validation
 from django.http import Http404  # для закрытия не сделанных тестов (УБРАТЬ)
 from rest_framework import status
 from rest_framework.reverse import reverse
 from rest_framework.test import APIClient, APIRequestFactory, APITestCase
 
-from .models import StatusTask, User
+from .models import Board, StatusTask, User, UserBoard, UserRole
 
 factory = APIRequestFactory()
 
-
-def create_test_user(super=False, active=True, staff=False):
-    usr = User.objects.create_user(
-        username='username', email='email@mail.ru', password='123123123g'
-    )
-    if super:
-        usr.is_superuser = True
-
-    if not active:
-        usr.is_active = False
-
-    if staff:
-        usr.is_staff = True
-
-    usr.save()
-
-    return usr
-
-
-def create_test2_user(super=False, active=True, staff=False):
-    usr = User.objects.create_user(
-        username='username2', email='email@mail.ru', password='123123123g'
-    )
-    if super:
-        usr.is_superuser = True
-
-    if active:
-        usr.is_active = True
-
-    if staff:
-        usr.is_staff = True
-
-    usr.save()
+# user = User.objects.create_user(username='test', email='test@test.ru', password='test')
+# user2 = User.objects.create_user(
+#     username='test2', email='testw@test.ru', password='test2'
+# )
+# board = Board.objects.create(name='test')
+# user_role = UserRole.objects.create(
+#     name='test',
+#     id_board=board.id,
+#     creating_role=True,
+#     editing_role=True,
+#     deleting_role=True,
+# )
+# user_board = UserBoard.objects.create(
+#     id_user=user.id, id_board=board.id, id_user_role=user_role.id
+# )
+# user.save()
+# user2.save()
+# board.save()
+# user_role.save()
+# user_board.save()
+# resp = self.client.post('/auth/jwt/create/', {user.name, user.password}, format='json')
+# client = APIClient()
+# client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + resp.data[access])
+#
 
 
 class JWTTest(APITestCase):
-
     # Тест работы JWT
     def test_api_jwt(self):
         url = '/auth/jwt/create/'
@@ -56,10 +47,8 @@ class JWTTest(APITestCase):
         usr.is_active = False
         usr.save()
 
-        usr = create_test_user(active=False)
-
         resp = self.client.post(
-            url, {'username': usr.username, 'password': usr.password}, format='json'
+            url, {'username': username, 'password': password}, format='json'
         )
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
@@ -67,7 +56,7 @@ class JWTTest(APITestCase):
         usr.save()
 
         resp = self.client.post(
-            url, {'username': usr.username, 'password': usr.password}, format='json'
+            url, {'username': username, 'password': password}, format='json'
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertTrue('access' in resp.data)
@@ -93,20 +82,17 @@ class UserTest(APITestCase):
 
     # Получение юзером данных о себе полностью, а не своих не полностью
     def test_api_user_retrieve(self):
-        # url = '/auth/jwt/create/'
-        # url = '/auth/jwt/create/'
-        # username = 'test'
-        # email = 'test@test.ru'
-        # password = 'test'
-        # usr = User.objects.create_user(
-        #     username=username, email=email, password=password
-        # )
-        # usr.save()
+        username = 'test'
+        email = 'test@test.ru'
+        password = 'test'
+        user = User.objects.create_user(
+            username=username, email=email, password=password
+        )
+        user.save()
 
-        user = create_test_user()
         resp = self.client.post(
             '/auth/jwt/create/',
-            {'username': user.username, 'password': user.password},
+            {'username': username, 'password': password},
             format='json',
         )
         token = resp.data['access']
@@ -117,12 +103,10 @@ class UserTest(APITestCase):
         resp = client.get('/api/users/' + str(user.id) + '/', data={'format': 'json'})
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
-        # usr2 = User.objects.create_user(
-        #     username='test2', email='test2@test.ru', password='test2'
-        # )
-        # usr.save()
-
-        user2 = create_test2_user()
+        user2 = User.objects.create_user(
+            username='test2', email='test2@test.ru', password='test2'
+        )
+        user2.save()
 
         resp = client.get('/api/users/' + str(user2.id) + '/', data={'format': 'json'})
         self.assertNotContains(resp, 'login')
@@ -777,6 +761,7 @@ class StatusTaskTests(APITestCase):
         )
 
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        usr.delete()
 
     # пользователь сотрудник (is_staff) имеет доступ к put
     def test_api_status_task_staff_put(self):
@@ -802,8 +787,55 @@ class StatusTaskTests(APITestCase):
         resp = client.put('/api/status_tasks/' + str(st_task.id) + '/', {'name': 'abc'})
 
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        usr.delete()
 
 
 class UserRoleTests(APITestCase):
+    # user = User.objects.create_user(
+    #     username='test', email='test@test.ru', password='test'
+    # )
+    # user2 = User.objects.create_user(
+    #     username='test2', email='testw@test.ru', password='test2'
+    # )
+    # board = Board.objects.create(name='test')
+    # user_role = UserRole.objects.create(
+    #     name='test',
+    #     id_board=board.id,
+    #     creating_role=True,
+    #     editing_role=True,
+    #     deleting_role=True,
+    # )
+    # user_board = UserBoard.objects.create(
+    #     id_user=user.id, id_board=board.id, id_user_role=user_role.id
+    # )
+    # user.save()
+    # user2.save()
+    # board.save()
+    # user_role.save()
+    # user_board.save()
+    # resp = self.client.post(
+    #     '/auth/jwt/create/', {user.name, user.password}, format='json'
+    # )
+    # client = APIClient()
+    # client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + resp.data[access])
+
+    # тест на проверку создания роли
     def test_api_user_role_creating_with_true(self):
-        pass
+        resp = client.post(
+            '/api/user_roles/', {'name': 'test', 'id_board': board.id}, format='json'
+        )
+        self.assertEqual(resp.status, status.HTTP_201_CREATED)
+
+        user_role.creating_role = False
+        user_role.save()
+
+        resp = client.post(
+            'api/user_roles', {'name': 'test', 'id_board': board.id}, format='json'
+        )
+
+
+# тест на ввод неправильного id_board
+# тест на редактирование с разрешением
+# тест на редактирование без разрешения
+# тест на удаление с разрешением
+# тест на удаление без разрешения
