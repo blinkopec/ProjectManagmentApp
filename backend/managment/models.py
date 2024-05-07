@@ -55,7 +55,8 @@ class Task(models.Model):
 class UserRole(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=50)
-
+    id_board = models.ForeignKey('Board', related_name='roles', on_delete=models.CASCADE)
+    
     commenting = models.BooleanField(default=True)
 
     creating_task = models.BooleanField(default=True)

@@ -102,7 +102,7 @@ class StatusTaskSerializer(serializers.ModelSerializer):
 class UserRoleSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserRole
-        fields = ('id','name', 'commenting', 'deleting_board', 'creating_task', 'editing_task', 'deleting_task',
+        fields = ('id','name', 'id_board', 'commenting', 'deleting_board', 'creating_task', 'editing_task', 'deleting_task',
             'creating_block', 'editing_block', 'deleting_block', 'creating_status_task', 'editing_status_task', 'deleting_status_task',
             'creating_role', 'editing_role', 'deleting_role')
-
+ 
