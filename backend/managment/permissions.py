@@ -1,8 +1,10 @@
+from collections.abc import Iterable
 from http.client import INSUFFICIENT_STORAGE
+
 from django.db.models.query import FlatValuesListIterable
 from rest_framework import permissions
-from collections.abc import Iterable
-from .models import UserBoard, Block, Board, UserRole
+
+from .models import Block, Board, UserBoard, UserRole
 
 
 class ReadOnly(permissions.BasePermission):
@@ -109,8 +111,25 @@ class IsUserRelateToTaskOrReadOnly(permissions.BasePermission):
 # и удаление ролей не может производить действия с ролями, а только просматривать
 class IsUserCanEditingTaskOrReadOnly(permissions.BasePermission):
     def has_permission(self, request, view):
-        if request.user.is_authenticated:
-            return True
+        if request.method == 'GET':
+            if request.user.is_authenticated:
+                return True
+
+        if request.method == 'DELETE':
+            if request.user.is_authenticated:
+                return True
+
+        if request.method == 'PATCH' or request.method == 'PUT':
+            if request.user.is_authenticated:
+                return True
+
+        user_board = UserBoard.objects.select_related('id_user_role').get(
+            id_board=request.data.get("id_board"), id_user=request.user.id
+        )
+
+        if request.method == "POST" and request.user.is_authenticated:
+            if user_board.id_user_role.creating_role:
+                return True
 
     def has_object_permission(self, request, view, obj):
         user = request.user
@@ -118,31 +137,18 @@ class IsUserCanEditingTaskOrReadOnly(permissions.BasePermission):
         if user.is_superuser:
             return True
 
-        # roles = UserRole.objects.filter(
-        # id__in=UserBoard.objects.all()
-        # .filter(id_user=user.id)
-        # .values_list("id_user_role", flat=True)
-        # )
+        if request.method == 'GET':
+            if user.is_authenticated:
+                return True
 
-        # for role in roles:
-        # if role.creating_role:
-        # return True
-
-        # if role.editing_role:
-        # return True
-
-        # if role.deleting_role:
-        # return True
-
-        user_board = (
-            UserBoard.objects.get(
-                id_board=request.data.get("id_board"), id_user=user.id
-            )
-            .select_related("user_role")
-            .first()
+        user_board = UserBoard.objects.select_related("id_user_role").get(
+            id_user_role=obj.id, id_user=user.id
         )
 
-        # Обработчик на create
+        if request.method == "DELETE":
+            if user_board.id_user_role.deleting_role:
+                return True
+
         if request.method == "POST":
             if user_board.id_user_role.creating_role:
                 return True
@@ -153,8 +159,4 @@ class IsUserCanEditingTaskOrReadOnly(permissions.BasePermission):
 
         if request.method == "PATCH":
             if user_board.id_user_role.editing_role:
-                return True
-
-        if request.method == "DELETE":
-            if user_board.id_user_role.deleting_role:
                 return True

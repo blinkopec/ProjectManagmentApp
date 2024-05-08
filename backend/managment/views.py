@@ -1,32 +1,32 @@
-from django.shortcuts import render
-from rest_framework import generics
-from .models import User, StatusTask, UserRole, UserBoard, Board, Comment, Block, Task
-from .serializers import (
-    UserSerializer,
-    StatusTaskSerializer,
-    UserRoleSerializer,
-    UserBoardSerializer,
-    BoardSerializer,
-    CommentSerializer,
-    BlockSerializer,
-    TaskSerializer,
-    ExtUserSerializer,
-    UpdateUserSerializer,
-)
-from rest_framework.viewsets import ModelViewSet
-from rest_framework.response import Response
+from django.contrib.auth.hashers import make_password
 from django.http import JsonResponse
-from rest_framework import permissions, status
+from django.shortcuts import render
+from rest_framework import generics, permissions, status
+from rest_framework.response import Response
+from rest_framework.viewsets import ModelViewSet
+
+from .models import Block, Board, Comment, StatusTask, Task, User, UserBoard, UserRole
 from .permissions import (
     IsAdminOrReadOnly,
     IsOwnerOrReadOnly,
-    IsUserOrReadOnly,
-    IsUserRelateToBoardOrReadOnly,
-    IsUserRelateToBlockOrReadOnly,
-    IsUserRelateToTaskOrReadOnly,
     IsUserCanEditingTaskOrReadOnly,
+    IsUserOrReadOnly,
+    IsUserRelateToBlockOrReadOnly,
+    IsUserRelateToBoardOrReadOnly,
+    IsUserRelateToTaskOrReadOnly,
 )
-from django.contrib.auth.hashers import make_password
+from .serializers import (
+    BlockSerializer,
+    BoardSerializer,
+    CommentSerializer,
+    ExtUserSerializer,
+    StatusTaskSerializer,
+    TaskSerializer,
+    UpdateUserSerializer,
+    UserBoardSerializer,
+    UserRoleSerializer,
+    UserSerializer,
+)
 
 
 # User
@@ -167,49 +167,50 @@ class UserRoleAPIView(ModelViewSet):
     #         return Response("acces denied", status=status.HTTP_403_FORBIDDEN)
     #
     # Изменять может только пользователь с нужным разрешением или суперпользователь
-    def update(self, request, pk=None):
-        user = request.user
-        user_role = self.queryset.get(id=pk)
-
-        if user.is_superuser:
-            serializer = UserRoleSerializer(user_role, data=request.data)
-            if serializer.is_valid(raise_exception=True):
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_200_OK)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        user_board_role = UserBoard.objects.get(id_user_role=pk)
-
-        if user == user_board_role.id_user:
-            if user_board_role.id_user_role.editing_role:
-                serializer = UserRoleSerializer(user_role, data=request.data)
-                if serializer.is_valid(raise_exception=True):
-                    serializer.save()
-                    return Response(serializer.data, status=status.HTTP_200_OK)
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-            else:
-                return Response("access denied", status=status.HTTP_403_FORBIDDEN)
-
-        user_board = UserBoard.objects.get(
-            id_board=user_board_role.id_board, id_user=user.id
-        )
-
-        if user_board != None:
-            if user_board.id_user_role.editing_role:
-                serializer = UserRoleSerializer(user_role, data=request.data)
-                if serializer.is_valid(raise_exception=True):
-                    serializer.save()
-                    return Response(serializer.data, status=status.HTTP_200_OK)
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-            else:
-                return Response("access denied", status=status.HTTP_403_FORBIDDEN)
-        else:
-            return Response("acces denied", status=status.HTTP_403_FORBIDDEN)
-
-    # Удалять может только пользователь с нужным разрешением или суперпользователь
-    def destroy(self, request, pk=None):
-        #! проверка доски что у пользователя есть разрешение на удаление
-        pass
+    # def update(self, request, pk=None):
+    #     user = request.user
+    #     user_role = self.queryset.get(id=pk)
+    #
+    #     if user.is_superuser:
+    #         serializer = UserRoleSerializer(user_role, data=request.data)
+    #         if serializer.is_valid(raise_exception=True):
+    #             serializer.save()
+    #             return Response(serializer.data, status=status.HTTP_200_OK)
+    #         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    #
+    #     user_board_role = UserBoard.objects.get(id_user_role=pk)
+    #
+    #     if user == user_board_role.id_user:
+    #         if user_board_role.id_user_role.editing_role:
+    #             serializer = UserRoleSerializer(user_role, data=request.data)
+    #             if serializer.is_valid(raise_exception=True):
+    #                 serializer.save()
+    #                 return Response(serializer.data, status=status.HTTP_200_OK)
+    #             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    #         else:
+    #             return Response("access denied", status=status.HTTP_403_FORBIDDEN)
+    #
+    #     user_board = UserBoard.objects.get(
+    #         id_board=user_board_role.id_board, id_user=user.id
+    #     )
+    #
+    #     if user_board != None:
+    #         if user_board.id_user_role.editing_role:
+    #             serializer = UserRoleSerializer(user_role, data=request.data)
+    #             if serializer.is_valid(raise_exception=True):
+    #                 serializer.save()
+    #                 return Response(serializer.data, status=status.HTTP_200_OK)
+    #             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    #         else:
+    #             return Response("access denied", status=status.HTTP_403_FORBIDDEN)
+    #     else:
+    #         return Response("acces denied", status=status.HTTP_403_FORBIDDEN)
+    #
+    # # Удалять может только пользователь с нужным разрешением или суперпользователь
+    # def destroy(self, request, pk=None):
+    #     #! проверка доски что у пользователя есть разрешение на удаление
+    #     pass
+    #
 
 
 # UserBoard

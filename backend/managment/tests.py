@@ -1,37 +1,21 @@
 from django.contrib.auth.base_user import password_validation
-from django.http import Http404  # для закрытия не сделанных тестов (УБРАТЬ)
+from django.http import Http404
+from django.utils.safestring import (
+    SafeText,
+)  # для закрытия не сделанных тестов (УБРАТЬ)
 from rest_framework import status
 from rest_framework.reverse import reverse
-from rest_framework.test import APIClient, APIRequestFactory, APITestCase
+from rest_framework.test import (
+    APIClient,
+    APIRequestFactory,
+    APITestCase,
+    force_authenticate,
+)
+from rest_framework_simplejwt.tokens import AccessToken
 
 from .models import Board, StatusTask, User, UserBoard, UserRole
 
 factory = APIRequestFactory()
-
-# user = User.objects.create_user(username='test', email='test@test.ru', password='test')
-# user2 = User.objects.create_user(
-#     username='test2', email='testw@test.ru', password='test2'
-# )
-# board = Board.objects.create(name='test')
-# user_role = UserRole.objects.create(
-#     name='test',
-#     id_board=board.id,
-#     creating_role=True,
-#     editing_role=True,
-#     deleting_role=True,
-# )
-# user_board = UserBoard.objects.create(
-#     id_user=user.id, id_board=board.id, id_user_role=user_role.id
-# )
-# user.save()
-# user2.save()
-# board.save()
-# user_role.save()
-# user_board.save()
-# resp = self.client.post('/auth/jwt/create/', {user.name, user.password}, format='json')
-# client = APIClient()
-# client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + resp.data[access])
-#
 
 
 class JWTTest(APITestCase):
@@ -791,51 +775,113 @@ class StatusTaskTests(APITestCase):
 
 
 class UserRoleTests(APITestCase):
-    # user = User.objects.create_user(
-    #     username='test', email='test@test.ru', password='test'
-    # )
-    # user2 = User.objects.create_user(
-    #     username='test2', email='testw@test.ru', password='test2'
-    # )
-    # board = Board.objects.create(name='test')
-    # user_role = UserRole.objects.create(
-    #     name='test',
-    #     id_board=board.id,
-    #     creating_role=True,
-    #     editing_role=True,
-    #     deleting_role=True,
-    # )
-    # user_board = UserBoard.objects.create(
-    #     id_user=user.id, id_board=board.id, id_user_role=user_role.id
-    # )
-    # user.save()
-    # user2.save()
-    # board.save()
-    # user_role.save()
-    # user_board.save()
-    # resp = self.client.post(
-    #     '/auth/jwt/create/', {user.name, user.password}, format='json'
-    # )
-    # client = APIClient()
-    # client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + resp.data[access])
 
     # тест на проверку создания роли
-    def test_api_user_role_creating_with_true(self):
+    def test_api_user_role_CRUD(self):
+        user = User.objects.create_user(
+            username='testtesttest', email='test@test.ru', password='test'
+        )
+        user.save()
+
+        board = Board.objects.create(name='test')
+        board.save()
+
+        user_role = UserRole.objects.create(
+            name='test',
+            id_board=board,
+            creating_role=True,
+            editing_role=True,
+            deleting_role=False,
+        )
+        user_role.save()
+
+        user_board = UserBoard.objects.create(
+            id_user=user, id_board=board, id_user_role=user_role
+        )
+        user_board.save()
+
+        client = APIClient()
+        client.credentials(
+            HTTP_AUTHORIZATION=f'Bearer ' + str(AccessToken.for_user(user))
+        )
+
+        # GET
+        resp = client.get('/api/user_roles/', format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        resp = client.get('/api/user_roles/' + str(user_role.id) + '/', format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        # CREATE
         resp = client.post(
             '/api/user_roles/', {'name': 'test', 'id_board': board.id}, format='json'
         )
-        self.assertEqual(resp.status, status.HTTP_201_CREATED)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 
         user_role.creating_role = False
         user_role.save()
 
         resp = client.post(
-            'api/user_roles', {'name': 'test', 'id_board': board.id}, format='json'
+            '/api/user_roles/', {'name': 'test', 'id_board': board.id}, format='json'
         )
+
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        # PATCH and PUT
+        resp = client.patch(
+            '/api/user_roles/' + str(user_role.id) + '/',
+            {'name': 't', 'id_board': board.id},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        resp = client.put(
+            '/api/user_roles/' + str(user_role.id) + '/',
+            {'name': 't', 'id_board': board.id},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        user_role.editing_role = False
+        user_role.save()
+
+        resp = client.patch(
+            '/api/user_roles/' + str(user_role.id) + '/',
+            {'name': 't', 'id_board': board.id},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.put(
+            '/api/user_roles/' + str(user_role.id) + '/',
+            {'name': 't', 'id_board': board.id},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        # DELETE
+        resp = client.delete(
+            '/api/user_roles/' + str(user_role.id) + '/', format='json'
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        user_role.deleting_role = True
+        user_role.save()
+
+        resp = client.delete(
+            '/api/user_roles/' + str(user_role.id) + '/', format='json'
+        )
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+
+        # тестовый тест юзер не должен иметь возможность менять id_board
+        board2 = Board.objects.create(name='er')
+        user_role2 = UserRole.objects.create(name='tasdf', id_board=board2)
+        resp = client.patch(
+            '/api/user_roles/' + str(user_role2.id) + '/',
+            {'name': 'eeff', 'id_board': board.id},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.Http404)
 
 
 # тест на ввод неправильного id_board
-# тест на редактирование с разрешением
-# тест на редактирование без разрешения
-# тест на удаление с разрешением
-# тест на удаление без разрешения
