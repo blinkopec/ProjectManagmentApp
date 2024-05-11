@@ -25,7 +25,8 @@ class CommentSerializer(serializers.ModelSerializer):
 class UserBoardSerializer(DynamicFieldsCategorySerializer):
     class Meta:
         model = UserBoard
-        fields = ('id', 'id_user', 'id_board', 'id_user_role')
+        fields = ('id', 'id_user', 'id_board', 'id_user_role', 'is_admin')
+        read_only_fields = ('is_admin',)
 
 
 class BoardSerializer(serializers.ModelSerializer):
@@ -187,9 +188,3 @@ class UserRoleSerializer(serializers.ModelSerializer):
             'editing_role',
             'deleting_role',
         )
-
-    # def validate(self, data):
-    #     if 'id_board' not in data:
-    #         return serializers.ValidationError('id_board is required')
-    #     return data
-

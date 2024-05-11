@@ -69,6 +69,10 @@ class UserRole(models.Model):
 
     commenting = models.BooleanField(default=True)
 
+    add_members = models.BooleanField(default=True)
+    delete_members = models.BooleanField(default=False)
+    edit_members = models.BooleanField(default=False)
+
     creating_task = models.BooleanField(default=True)
     deleting_task = models.BooleanField(default=True)
     editing_task = models.BooleanField(default=True)
@@ -93,6 +97,6 @@ class UserBoard(models.Model):
     id_user = models.ForeignKey(User, related_name='boards', on_delete=models.CASCADE)
     id_board = models.ForeignKey(Board, related_name='users', on_delete=models.CASCADE)
     id_user_role = models.ForeignKey(
-        'UserRole', related_name='roles', on_delete=models.CASCADE
+        UserRole, related_name='roles', on_delete=models.CASCADE
     )
-
+    is_admin = models.BooleanField(default=False, null=True)

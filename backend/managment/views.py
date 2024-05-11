@@ -9,11 +9,12 @@ from .models import Block, Board, Comment, StatusTask, Task, User, UserBoard, Us
 from .permissions import (
     IsAdminOrReadOnly,
     IsOwnerOrReadOnly,
-    IsUserCanEditingTaskOrReadOnly,
     IsUserOrReadOnly,
+    IsUserOrUserRoleCanEditDelete,
     IsUserRelateToBlockOrReadOnly,
     IsUserRelateToBoardOrReadOnly,
     IsUserRelateToTaskOrReadOnly,
+    IsUserRoleCanCRUDUserRole,
 )
 from .serializers import (
     BlockSerializer,
@@ -120,104 +121,14 @@ class StatusTaskAPIView(ModelViewSet):
 class UserRoleAPIView(ModelViewSet):
     queryset = UserRole.objects.all()
     serializer_class = UserRoleSerializer
-    permission_classes = [IsUserCanEditingTaskOrReadOnly]
-
-    # Изменять может только пользователь с нужным разрешением или суперпользователь
-    # def partial_update(self, request, pk=None):
-    #     user = request.user
-    #     user_role = self.queryset.get(id=pk)
-    #
-    #     if user.is_superuser:
-    #         serializer = UserRoleSerializer(user_role, data=request.data, partial=True)
-    #         if serializer.is_valid(raise_exception=True):
-    #             serializer.save()
-    #             return Response(serializer.data, status=status.HTTP_200_OK)
-    #         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    #
-    #     user_board_role = UserBoard.objects.get(id_user_role=pk)
-    #
-    #     if user == user_board_role.id_user:
-    #         if user_board_role.id_user_role.editing_role:
-    #             serializer = UserRoleSerializer(
-    #                 user_role, data=request.data, partial=True
-    #             )
-    #             if serializer.is_valid(raise_exception=True):
-    #                 serializer.save()
-    #                 return Response(serializer.data, status=status.HTTP_200_OK)
-    #             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    #         else:
-    #             return Response("access denied", status=status.HTTP_403_FORBIDDEN)
-    #
-    #     user_board = UserBoard.objects.get(
-    #         id_board=user_board_role.id_board, id_user=user.id
-    #     )
-    #
-    #     if user_board != None:
-    #         if user_board.id_user_role.editing_role:
-    #             serializer = UserRoleSerializer(
-    #                 user_role, data=request.data, partial=True
-    #             )
-    #             if serializer.is_valid(raise_exception=True):
-    #                 serializer.save()
-    #                 return Response(serializer.data, status=status.HTTP_200_OK)
-    #             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    #         else:
-    #             return Response("access denied", status=status.HTTP_403_FORBIDDEN)
-    #     else:
-    #         return Response("acces denied", status=status.HTTP_403_FORBIDDEN)
-    #
-    # Изменять может только пользователь с нужным разрешением или суперпользователь
-    # def update(self, request, pk=None):
-    #     user = request.user
-    #     user_role = self.queryset.get(id=pk)
-    #
-    #     if user.is_superuser:
-    #         serializer = UserRoleSerializer(user_role, data=request.data)
-    #         if serializer.is_valid(raise_exception=True):
-    #             serializer.save()
-    #             return Response(serializer.data, status=status.HTTP_200_OK)
-    #         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    #
-    #     user_board_role = UserBoard.objects.get(id_user_role=pk)
-    #
-    #     if user == user_board_role.id_user:
-    #         if user_board_role.id_user_role.editing_role:
-    #             serializer = UserRoleSerializer(user_role, data=request.data)
-    #             if serializer.is_valid(raise_exception=True):
-    #                 serializer.save()
-    #                 return Response(serializer.data, status=status.HTTP_200_OK)
-    #             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    #         else:
-    #             return Response("access denied", status=status.HTTP_403_FORBIDDEN)
-    #
-    #     user_board = UserBoard.objects.get(
-    #         id_board=user_board_role.id_board, id_user=user.id
-    #     )
-    #
-    #     if user_board != None:
-    #         if user_board.id_user_role.editing_role:
-    #             serializer = UserRoleSerializer(user_role, data=request.data)
-    #             if serializer.is_valid(raise_exception=True):
-    #                 serializer.save()
-    #                 return Response(serializer.data, status=status.HTTP_200_OK)
-    #             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    #         else:
-    #             return Response("access denied", status=status.HTTP_403_FORBIDDEN)
-    #     else:
-    #         return Response("acces denied", status=status.HTTP_403_FORBIDDEN)
-    #
-    # # Удалять может только пользователь с нужным разрешением или суперпользователь
-    # def destroy(self, request, pk=None):
-    #     #! проверка доски что у пользователя есть разрешение на удаление
-    #     pass
-    #
+    permission_classes = [IsUserRoleCanCRUDUserRole]
 
 
 # UserBoard
 class UserBoardAPIView(ModelViewSet):
     queryset = UserBoard.objects.all()
     serializer_class = UserBoardSerializer
-    permission_classes = [IsOwnerOrReadOnly]
+    permission_classes = [IsUserOrUserRoleCanEditDelete]
 
 
 # Board
