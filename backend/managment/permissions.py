@@ -1,7 +1,8 @@
 from collections.abc import Iterable
 from http.client import INSUFFICIENT_STORAGE
-from typing import TypeGuard
+from typing import TypeGuard, reveal_type
 
+from django.db.models.fields.related import resolve_relation
 from django.db.models.functions import TruncYear
 from django.db.models.query import FlatValuesListIterable
 from django.middleware.csrf import is_same_domain
@@ -116,6 +117,7 @@ class IsUserRelateToTaskOrReadOnly(permissions.BasePermission):
 # и удаление ролей не может производить действия с ролями, а только просматривать
 class IsUserRoleCanCRUDUserRole(permissions.BasePermission):
     def has_permission(self, request, view):
+
         if request.method == 'GET':
             if request.user.is_authenticated:
                 return True
@@ -131,6 +133,8 @@ class IsUserRoleCanCRUDUserRole(permissions.BasePermission):
         user_board = UserBoard.objects.select_related('id_user_role').get(
             id_board=request.data.get("id_board"), id_user=request.user.id
         )
+        if not user_board:
+            return False
 
         if request.method == "POST" and request.user.is_authenticated:
             if user_board.is_admin:
@@ -153,15 +157,14 @@ class IsUserRoleCanCRUDUserRole(permissions.BasePermission):
                 id_board=obj.id_board, id_user=user.id
             )
 
+            if not user_board:
+                return False
+
             if user_board.is_admin:
                 return True
 
             if request.method == "DELETE":
                 if user_board.id_user_role.deleting_role:
-                    return True
-
-            if request.method == "POST":
-                if user_board.id_user_role.creating_role:
                     return True
 
             if 'id_board' not in request.data and request.method == 'PATCH':
@@ -188,22 +191,38 @@ class IsUserOrUserRoleCanEditDelete(permissions.BasePermission):
 
         if request.method == 'POST':
             if request.user.is_authenticated:
-                if request.data['id_user'] == request.user.id:
-                    return True
+                user_board_exists = view.queryset.filter(
+                    id_user=request.data.get('id_user'),
+                    id_board=request.data.get('id_board'),
+                ).first()
+
+                if user_board_exists:
+                    return False
+
+                # проверка есть ли у пользователя роль в этой доске и имеет ли он разрешение на добавление участников
                 user_board = (
                     view.queryset.select_related('id_user_role')
-                    .filter(id_user=request.user, id_board=request.data['id_board'])
+                    .filter(
+                        id_user=request.user.id,
+                        id_board=request.data.get('id_board'),
+                    )
                     .first()
                 )
-
                 if not user_board:
                     return False
 
                 if user_board.is_admin:
                     return True
 
+                # проверка имеет ли пользователь разрешение на добавление и одинаковые ли доски указаны в роли и в юзер борде
                 if user_board.id_user_role.add_members:
-                    return True
+                    role = UserRole.objects.get(id=request.data.get('id_user_role'))
+
+                    if not role:
+                        return False
+
+                    if user_board.id_board == role.id_board:
+                        return True
             return False
 
         if request.user.is_authenticated:
@@ -217,17 +236,22 @@ class IsUserOrUserRoleCanEditDelete(permissions.BasePermission):
 
         if request.user.is_authenticated:
             if request.method == 'GET':
-                return True  # вывод только пользователей, которые состоят в твоих досках и твои доски
+                return True
 
-            if request.method == 'PATCH':  # можно изменять толкьо роль
+            if request.method == 'PATCH':  # можно изменять только роль
                 if 'id_user' not in request.data and 'id_board' not in request.data:
                     user_board = (
                         view.queryset.select_related('id_user_role')
-                        .filter(id_user=request.user, id_board=obj.id_board)
+                        .filter(id_user=request.user.id, id_board=obj.id_board)
                         .first()
                     )
+                    if not user_board:
+                        return False
+
+                    # проверка на одинаковые id_board
                     if user_board.id_user_role.edit_members:
-                        return True
+                        if user_board.id_board == obj.id_user_role.id_board:
+                            return True
 
             if request.method == 'PUT':  # не разрешен
                 return False
@@ -237,8 +261,12 @@ class IsUserOrUserRoleCanEditDelete(permissions.BasePermission):
                     return True
                 user_board = (
                     view.queryset.select_related('id_user_role')
-                    .filter(id_user=request.user, id_board=obj.id_board)
+                    .filter(id_user=request.user.id, id_board=obj.id_board)
                     .first()
                 )
+
+                if not user_board:
+                    return False
+
                 if user_board.id_user_role.delete_members:
                     return True

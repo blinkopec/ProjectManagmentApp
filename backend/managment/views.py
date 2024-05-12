@@ -1,7 +1,17 @@
+from operator import truediv
+from typing import dataclass_transform
+
 from django.contrib.auth.hashers import make_password
+from django.contrib.auth.password_validation import re
+from django.core.serializers.base import SerializationError
+from django.db.models.fields.related import resolve_relation
 from django.http import JsonResponse
 from django.shortcuts import render
+from django.urls import is_valid_path
+from django.utils.formats import sanitize_separators
+from django.utils.text import add_truncation_text
 from rest_framework import generics, permissions, status
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
@@ -123,12 +133,44 @@ class UserRoleAPIView(ModelViewSet):
     serializer_class = UserRoleSerializer
     permission_classes = [IsUserRoleCanCRUDUserRole]
 
+    # получение ролей определенной доски, в которой состоит пользователь
+    @action(detail=True, methods=['get'])
+    def get_by_id_board(self, request, pk=None):
+        check_pk = UserBoard.objects.filter(id_board=pk, id_user=request.user.id)
+        if not check_pk:
+            return Response('access denied', status.HTTP_403_FORBIDDEN)
+        result = self.queryset.filter(id_board=pk)
+
+        serializer = UserRoleSerializer(data=result, many=True)
+        serializer.is_valid()
+        return Response(serializer.data, status.HTTP_200_OK)
+
 
 # UserBoard
 class UserBoardAPIView(ModelViewSet):
     queryset = UserBoard.objects.all()
     serializer_class = UserBoardSerializer
     permission_classes = [IsUserOrUserRoleCanEditDelete]
+
+    # вывод только пользователей, которые состоят в твоих досках и твои доски
+    def list(self, request):
+        boards = self.queryset.filter(id_user=request.user.id).values_list('id_board')
+        result = self.queryset.filter(id_board__in=boards)
+
+        serializer = UserBoardSerializer(data=result, many=True)
+        serializer.is_valid()
+        return Response(serializer.data, status.HTTP_200_OK)
+
+    # получение user_boards по id_board, показывает доски те, в которых состоит пользователь и его доски
+    @action(detail=True, methods=['get'])
+    def get_by_id_board(self, request, pk=None):
+        check_pk = self.queryset.filter(id_board=pk, id_user=request.user.id)
+        if not check_pk:
+            return Response('access denied', status.HTTP_403_FORBIDDEN)
+        user_boards = self.queryset.filter(id_board=pk)
+        serializer = UserBoardSerializer(data=user_boards, many=True)
+        serializer.is_valid()
+        return Response(serializer.data, status.HTTP_200_OK)
 
 
 # Board

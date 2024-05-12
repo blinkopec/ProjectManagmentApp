@@ -891,6 +891,14 @@ class UserRoleTests(APITestCase):
         )
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
+        user_board.is_admin = True
+        user_board.save()
+
+        resp = client.patch(
+            '/api/user_roles/' + str(user_role.id) + '/', {'name': 'asd'}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
         resp = client.delete(
             '/api/user_roles/' + str(user_role.id) + '/', format='json'
         )
@@ -935,9 +943,27 @@ class UserBoardTests(APITestCase):
         resp = client.get('/api/user_boards/', format='json')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
+        board3 = Board.objects.create(name='asdasd')
+        board3.save()
+
+        user_role3 = UserRole.objects.create(
+            name='asdsadsasad', id_board=board3, add_members=True
+        )
+        user_role3.save()
+
+        user_board3 = UserBoard.objects.create(
+            id_user=user, id_board=board3, id_user_role=user_role3, is_admin=True
+        )
+        user_board3.save()
+
+        user3 = User.objects.create(
+            username='asdsadsaagff', email='k@k.krr', password='sadad132'
+        )
+        user3.save()
+
         resp = client.post(
             '/api/user_boards/',
-            {'id_user': user.id, 'id_board': board2.id, 'id_user_role': user_role2.id},
+            {'id_user': user3.id, 'id_board': board3.id, 'id_user_role': user_role3.id},
             format='json',
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
@@ -1047,7 +1073,7 @@ class UserBoardTests(APITestCase):
         user_role.save()
 
         resp = client.patch(
-            '/api/user_boards/' + str(user_board2.id) + '/',
+            '/api/user_boards/' + str(user_board.id) + '/',
             {'id_user_role': user_role.id},
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
@@ -1055,11 +1081,17 @@ class UserBoardTests(APITestCase):
         resp = client.delete('/api/user_boards/' + str(user_board2.id) + '/')
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
-        user_role.delete_members = True
-        user_role.save()
+        user_board.is_admin = True
+        user_board.save()
 
-        resp = client.delete('/api/user_boards/' + str(user_board2.id) + '/')
-        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+        resp = client.patch(
+            '/api/user_boards/' + str(user_board.id) + '/',
+            {'id_user_role': user_role.id},
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        user_board.is_admin = False
+        user_board.save()
 
         resp = client.post(
             '/api/user_boards/',
@@ -1067,12 +1099,27 @@ class UserBoardTests(APITestCase):
         )
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
-        user_role.add_members = True
-        user_role.save()
+        board3 = Board.objects.create(name='asdasd')
+        board3.save()
+
+        user_role3 = UserRole.objects.create(
+            name='asdsadsasad', id_board=board3, add_members=True
+        )
+        user_role3.save()
+
+        user_board3 = UserBoard.objects.create(
+            id_user=user, id_board=board3, id_user_role=user_role3
+        )
+        user_board3.save()
+
+        user3 = User.objects.create(
+            username='asdsadsaagff', email='k@k.krr', password='sadad132'
+        )
+        user3.save()
 
         resp = client.post(
             '/api/user_boards/',
-            {'id_user': user2.id, 'id_board': board.id, 'id_user_role': user_role.id},
+            {'id_user': user3.id, 'id_board': board3.id, 'id_user_role': user_role3.id},
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 
@@ -1081,6 +1128,12 @@ class UserBoardTests(APITestCase):
             {'id_user': user2.id, 'id_board': board2.id, 'id_user_role': user_role.id},
         )
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        user_role.delete_members = True
+        user_role.save()
+
+        resp = client.delete('/api/user_boards/' + str(user_board2.id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
 
     def test_api_user_board_unauthorized(self):
         user = User.objects.create(
