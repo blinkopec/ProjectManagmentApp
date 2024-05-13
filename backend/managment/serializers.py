@@ -175,6 +175,7 @@ class UserRoleSerializer(serializers.ModelSerializer):
             'id_board',
             'commenting',
             'deleting_board',
+            'editing_board',
             'creating_task',
             'editing_task',
             'deleting_task',

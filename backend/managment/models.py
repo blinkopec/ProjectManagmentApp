@@ -77,6 +77,7 @@ class UserRole(models.Model):
     deleting_task = models.BooleanField(default=True)
     editing_task = models.BooleanField(default=True)
 
+    editing_board = models.BooleanField(default=True)
     deleting_board = models.BooleanField(default=True)
 
     creating_block = models.BooleanField(default=True)

@@ -1,12 +1,11 @@
 from collections import namedtuple
 from inspect import formatannotation
 
+from django import setup
 from django.contrib.auth.base_user import password_validation
 from django.contrib.auth.password_validation import password_changed
-from django.http import Http404
-from django.utils.safestring import (
-    SafeText,
-)  # для закрытия не сделанных тестов (УБРАТЬ)
+from django.http import Http404, request
+from django.utils.safestring import SafeText
 from rest_framework import status
 from rest_framework.reverse import reverse
 from rest_framework.test import (
@@ -18,8 +17,6 @@ from rest_framework.test import (
 from rest_framework_simplejwt.tokens import AccessToken
 
 from .models import Board, StatusTask, User, UserBoard, UserRole
-
-factory = APIRequestFactory()
 
 
 class JWTTest(APITestCase):
@@ -1174,3 +1171,149 @@ class UserBoardTests(APITestCase):
 
         resp = client.delete('/api/user_boards/' + str(user_board.id) + '/')
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class BoardTests(APITestCase):
+    @classmethod
+    def setUpData(cls):
+        user = User.objects.create_user(
+            username='qwerty', email='qwerty', password='qwertqwert'
+        )
+        board = Board.objects.create(name='1')
+        board2 = Board.objects.create(name='2')
+        user2 = User.objects.create_user(
+            username='abcabc', email='com@com.com', password='passwordpassword'
+        )
+        board.save()
+        board2.save()
+        user2.save()
+        user_role = UserRole.objects.create(name='1', id_board=board)
+        user_role2 = UserRole.objects.create(name='2', id_board=board2)
+        user_role.save()
+        user_role2.save()
+        user_board = UserBoard.objects.create(
+            id_board=board, id_user=user, id_user_role=user_role
+        )
+        user_board.save()
+        user_board2 = UserBoard.objects.create(
+            id_board=board2, id_user=user2, id_user_role=user_role2
+        )
+        user_board2.save()
+
+        client = APIClient()
+        client.credentials(
+            HTTP_AUTHORIZATION=f'Bearer ' + str(AccessToken.for_user(user))
+        )
+
+        return {
+            'client': client,
+            'user': user,
+            'user2': user2,
+            'board': board,
+            'board2': board2,
+            'user_role': user_role,
+            'user_rol2': user_role2,
+            'user_board': user_board,
+            'user_board2': user_board2,
+        }
+
+    def api_test_board_create(self):
+        data = BoardTests.setUpData()
+
+        resp = data['client'].post('/api/boards/', {'name': 'asdasdasd'})
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        created_board = Board.objects.latest('pk')
+        ub = UserBoard.objects.get(id_board=created_board.id, id_user=data['user'].id)
+        self.assertTrue(ub)
+
+    def api_test_board_update(self):
+        data = BoardTests.setUpData()
+
+        resp = data['client'].patch(
+            '/api/boards/' + str(data['board'].id) + '/', {'name': 'asd'}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        resp = data['client'].patch(
+            '/api/boards/' + str(data['board2'].id) + '/', {'name': 'asd'}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = data['client'].put(
+            '/api/boards/' + str(data['board'].id) + '/', {'name': 'absd'}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        resp = data['client'].put(
+            '/api/boards/' + str(data['board2'].id) + '/', {'name': 'absd'}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_role'].editing_board = False
+        data['user_role'].save()
+
+        resp = data['client'].put(
+            '/api/boards/' + str(data['board'].id) + '/', {'name': 'absd'}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = data['client'].patch(
+            '/api/boards/' + str(data['board'].id) + '/', {'name': 'asd'}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_board'].is_admin = True
+        data['user_board'].save()
+
+        resp = data['client'].put(
+            '/api/boards/' + str(data['board'].id) + '/', {'name': 'absd'}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        resp = data['client'].patch(
+            '/api/boards/' + str(data['board'].id) + '/', {'name': 'asd'}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        data['user_board'].is_admin = False
+        data['user_board'].save()
+
+    def api_test_board_delete(self):
+        data = BoardTests.setUpData()
+
+        resp = data['client'].delete('/api/boards/' + str(data['board2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_role'].deleting_board = False
+        data['user_role'].save()
+
+        resp = data['client'].delete('/api/boards/' + str(data['board'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_role'].deleting_board = True
+        data['user_role'].save()
+
+        resp = data['client'].delete('/api/boards/' + str(data['board'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+
+    def api_test_board_get_list(self):
+        data = BoardTests.setUpData()
+
+        resp = data['client'].get('/api/boards/')
+
+        result = list()
+        for i in resp.json():
+            for x, y in i.items():
+                if x == 'id':
+                    result.append(y)
+
+        self.assertTrue(data['board2'].id not in result)
+
+    def api_test_board_get_pk(self):
+        data = BoardTests.setUpData()
+
+        resp = data['client'].get('/api/boards/' + str(data['board'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        resp = data['client'].get('/api/boards/' + str(data['board2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)

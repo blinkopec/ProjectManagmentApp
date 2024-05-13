@@ -71,11 +71,29 @@ class IsUserRelateToBoardOrReadOnly(permissions.BasePermission):
         if request.user.is_superuser:
             return True
 
-        if UserBoard.objects.all().filter(id_user=request.user, id_board=obj.id):
-            return True
-
         if request.method in permissions.SAFE_METHODS:
             return True
+
+        user_board = (
+            UserBoard.objects.select_related('id_user_role')
+            .filter(id_user=request.user, id_board=obj.id)
+            .first()
+        )
+        if user_board:
+            if user_board.is_admin:
+                return True
+
+            if request.method == 'DELETE':
+                if user_board.id_user_role.deleting_board:
+                    return True
+                else:
+                    return False
+
+            if request.method == 'PATCH' or request.method == 'PUT':
+                if user_board.id_user_role.editing_board:
+                    return True
+                else:
+                    return False
 
 
 class IsUserRelateToBlockOrReadOnly(permissions.BasePermission):
@@ -87,7 +105,16 @@ class IsUserRelateToBlockOrReadOnly(permissions.BasePermission):
         if request.user.is_superuser:
             return True
 
-        if UserBoard.objects.all().filter(id_user=request.user, id_board=obj.id_board):
+        user_board = UserBoard.objects.all().filter(
+            id_user=request.user, id_board=obj.id_board
+        )
+        if user_board:
+            if request.method == 'DELETE':
+                if ub.id_user_role.deleting_board:
+                    return True
+                else:
+                    return False
+
             return True
 
         if request.method in permissions.SAFE_METHODS:
