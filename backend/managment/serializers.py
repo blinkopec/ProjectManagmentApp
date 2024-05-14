@@ -163,7 +163,7 @@ class BlockSerializer(serializers.ModelSerializer):
 class StatusTaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = StatusTask
-        fields = ('id', 'name')
+        fields = ('id', 'name', 'id_board')
 
 
 class UserRoleSerializer(serializers.ModelSerializer):

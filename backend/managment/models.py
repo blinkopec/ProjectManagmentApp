@@ -45,6 +45,9 @@ class Comment(models.Model):
 class StatusTask(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=20)
+    id_board = models.ForeignKey(
+        Board, related_name='status_tasks', on_delete=models.CASCADE
+    )
 
 
 class Task(models.Model):

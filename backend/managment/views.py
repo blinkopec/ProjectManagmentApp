@@ -26,6 +26,7 @@ from .permissions import (
     IsUserRelateToBlockOrReadOnly,
     IsUserRelateToBoardOrReadOnly,
     IsUserRelateToTaskOrReadOnly,
+    IsUserRoleCanCRUDStatusTask,
     IsUserRoleCanCRUDUserRole,
 )
 from .serializers import (
@@ -126,7 +127,41 @@ class UserAPIView(ModelViewSet):
 class StatusTaskAPIView(ModelViewSet):
     queryset = StatusTask.objects.all()
     serializer_class = StatusTaskSerializer
-    permission_classes = [IsAdminOrReadOnly]
+    permission_classes = [IsUserRoleCanCRUDStatusTask]
+
+    def list(self, request):
+        boards_id = UserBoard.objects.filter(id_user=request.user.id).values_list(
+            'id_board'
+        )
+        result = self.queryset.filter(id_board__in=boards_id)
+        serializer = self.get_serializer(data=result, many=True)
+        serializer.is_valid()
+        return Response(serializer.data, status.HTTP_200_OK)
+
+    # вывод только тех досок, в которых есть пользователь
+    def retrieve(self, request, pk=None):
+        instance = self.get_object()
+
+        check_id_board = UserBoard.objects.filter(
+            id_board=instance.id_board, id_user=request.user.id
+        ).first()
+
+        if not check_id_board:
+            return Response('access denied', status.HTTP_403_FORBIDDEN)
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'])
+    def get_by_id_board(self, request, pk=None):
+        check_pk = UserBoard.objects.filter(id_board=pk, id_user=request.user.id)
+        if not check_pk:
+            return Response('access denied', status.HTTP_403_FORBIDDEN)
+
+        instance = self.queryset.filter(id_board=pk)
+        serializer = self.get_serializer(data=instance, many=True)
+        serializer.is_valid()
+        return Response(serializer.data)
 
 
 # UserRole
@@ -319,14 +354,28 @@ class BlockAPIView(ModelViewSet):
     serializer_class = BlockSerializer
     permission_classes = [IsUserRelateToBlockOrReadOnly]
 
-    # Выводит только те блоки, которые принадлежат к доскам, в которых есть пользователь
-    def get_queryset(self):
-        user = self.request.user
-        return self.queryset.filter(
-            id_board__in=UserBoard.objects.all()
-            .filter(id_user=user.id)
-            .values_list("id_board", flat=True)
+    def retrieve(self, request, pk=None):
+        instance = self.get_object()
+
+        check_id_board = UserBoard.objects.filter(
+            id_board=instance.id_board, id_user=request.user.id
+        ).first()
+
+        if not check_id_board:
+            return Response('access denied', status.HTTP_403_FORBIDDEN)
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+    def list(self, request):
+        boards = UserBoard.objects.filter(id_user=request.user.id).values_list(
+            'id_board'
         )
+        result = self.queryset.filter(id_board__in=boards)
+
+        serializer = self.get_serializer(data=result, many=True)
+        serializer.is_valid()
+        return Response(serializer.data, status.HTTP_200_OK)
 
 
 # Task

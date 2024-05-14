@@ -1,11 +1,14 @@
 from collections.abc import Iterable
 from http.client import INSUFFICIENT_STORAGE
+from operator import truediv
 from typing import TypeGuard, reveal_type
 
+from django.contrib.auth.password_validation import re
 from django.db.models.fields.related import resolve_relation
 from django.db.models.functions import TruncYear
 from django.db.models.query import FlatValuesListIterable
 from django.middleware.csrf import is_same_domain
+from django.urls import register_converter
 from django.utils.encoding import repercent_broken_unicode
 from rest_framework import permissions
 
@@ -71,6 +74,9 @@ class IsUserRelateToBoardOrReadOnly(permissions.BasePermission):
         if request.user.is_superuser:
             return True
 
+        if not request.user.is_authenticated:
+            return False
+
         if request.method in permissions.SAFE_METHODS:
             return True
 
@@ -86,18 +92,34 @@ class IsUserRelateToBoardOrReadOnly(permissions.BasePermission):
             if request.method == 'DELETE':
                 if user_board.id_user_role.deleting_board:
                     return True
-                else:
-                    return False
+                return False
 
             if request.method == 'PATCH' or request.method == 'PUT':
                 if user_board.id_user_role.editing_board:
                     return True
-                else:
-                    return False
+                return False
 
 
 class IsUserRelateToBlockOrReadOnly(permissions.BasePermission):
     def has_permission(self, request, view):
+        if request.method == 'POST':
+            user_board = (
+                UserBoard.objects.select_related('id_user_role')
+                .filter(id_user=request.user.id, id_board=request.data['id_board'])
+                .first()
+            )
+
+            if not user_board:
+                return False
+
+            if user_board.is_admin:
+                return True
+
+            if user_board.id_user_role.creating_block:
+                return True
+
+            return False
+
         if request.user.is_authenticated:
             return True
 
@@ -105,20 +127,36 @@ class IsUserRelateToBlockOrReadOnly(permissions.BasePermission):
         if request.user.is_superuser:
             return True
 
-        user_board = UserBoard.objects.all().filter(
-            id_user=request.user, id_board=obj.id_board
-        )
-        if user_board:
-            if request.method == 'DELETE':
-                if ub.id_user_role.deleting_board:
-                    return True
-                else:
-                    return False
-
-            return True
+        if not request.user.is_authenticated:
+            return False
 
         if request.method in permissions.SAFE_METHODS:
             return True
+
+        user_board = (
+            UserBoard.objects.select_related('id_user_role')
+            .filter(id_user=request.user, id_board=obj.id_board)
+            .first()
+        )
+
+        if user_board:
+
+            if request.method == 'PUT':
+                return False
+
+            if user_board.is_admin:
+                return True
+
+            if request.method == 'DELETE':
+                if user_board.id_user_role.deleting_block:
+                    return True
+                return False
+
+            if request.method == 'PATCH':
+                if user_board.id_user_role.editing_block:
+                    if 'id_board' not in request.data:
+                        return True
+                return False
 
 
 class IsUserRelateToTaskOrReadOnly(permissions.BasePermission):
@@ -180,8 +218,10 @@ class IsUserRoleCanCRUDUserRole(permissions.BasePermission):
             if request.method == 'GET':
                 return True
 
-            user_board = UserBoard.objects.select_related("id_user_role").get(
-                id_board=obj.id_board, id_user=user.id
+            user_board = (
+                UserBoard.objects.select_related("id_user_role")
+                .filter(id_board=obj.id_board, id_user=user.id)
+                .first()
             )
 
             if not user_board:
@@ -205,6 +245,61 @@ class IsUserRoleCanCRUDUserRole(permissions.BasePermission):
 
                 if request.method == "PATCH":
                     if user_board.id_user_role.editing_role:
+                        return True
+
+
+# StatusTask
+# Админ может делать все
+# Добавление, удаление, редактирование - разрешения у роли
+class IsUserRoleCanCRUDStatusTask(permissions.BasePermission):
+    def has_permission(self, request, view):
+        if request.method == 'POST':
+            user_board = (
+                UserBoard.objects.select_related('id_user_role')
+                .filter(id_user=request.user.id, id_board=request.data.get('id_board'))
+                .first()
+            )
+
+            if user_board:
+                if user_board.is_admin:
+                    return True
+                if user_board.id_user_role.creating_status_task:
+                    return True
+                return False
+            else:
+                return False
+
+        if request.user.is_authenticated:
+            return True
+
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_superuser:
+            return True
+
+        if not request.user.is_authenticated:
+            return False
+
+        if request.method == 'GET':
+            return True
+
+        user_board = (
+            UserBoard.objects.select_related('id_user_role')
+            .filter(id_user=request.user.id, id_board=obj.id_board.id)
+            .first()
+        )
+
+        if user_board:
+            if request.method == 'PUT':
+                return False
+            if user_board.is_admin:
+                return True
+
+            if request.method == 'DELETE':
+                if user_board.id_user_role.deleting_status_task:
+                    return True
+            if request.method == 'PATCH':
+                if user_board.id_user_role.editing_status_task:
+                    if 'id_board' not in request.data:
                         return True
 
 
@@ -262,38 +357,33 @@ class IsUserOrUserRoleCanEditDelete(permissions.BasePermission):
             return True
 
         if request.user.is_authenticated:
-            if request.method == 'GET':
+            if request.method == permissions.SAFE_METHODS:
                 return True
 
-            if request.method == 'PATCH':  # можно изменять только роль
-                if 'id_user' not in request.data and 'id_board' not in request.data:
-                    user_board = (
-                        view.queryset.select_related('id_user_role')
-                        .filter(id_user=request.user.id, id_board=obj.id_board)
-                        .first()
-                    )
-                    if not user_board:
-                        return False
-
-                    # проверка на одинаковые id_board
-                    if user_board.id_user_role.edit_members:
-                        if user_board.id_board == obj.id_user_role.id_board:
-                            return True
-
-            if request.method == 'PUT':  # не разрешен
-                return False
-
-            if request.method == 'DELETE':
-                if request.user == obj.id_user:
-                    return True
-                user_board = (
-                    view.queryset.select_related('id_user_role')
-                    .filter(id_user=request.user.id, id_board=obj.id_board)
-                    .first()
-                )
-
-                if not user_board:
+            user_board = (
+                view.queryset.select_related('id_user_role')
+                .filter(id_user=request.user.id, id_board=obj.id_board)
+                .first()
+            )
+            if user_board:
+                if request.method == 'PUT':  # не разрешен
                     return False
-
-                if user_board.id_user_role.delete_members:
+                if user_board.is_admin:
                     return True
+
+                if request.method == 'PATCH':  # можно изменять только роль
+                    if (
+                        'id_user' not in request.data
+                        and 'id_board' not in request.data
+                        and 'is_admin' not in request.data
+                    ):
+                        # проверка на одинаковые id_board
+                        if user_board.id_user_role.edit_members:
+                            if user_board.id_board == obj.id_user_role.id_board:
+                                return True
+
+                if request.method == 'DELETE':
+                    if user_board.id_user_role.delete_members:
+                        return True
+                    if request.user == obj.id_user:
+                        return True

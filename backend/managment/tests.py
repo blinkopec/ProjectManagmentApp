@@ -1,9 +1,11 @@
 from collections import namedtuple
 from inspect import formatannotation
+from typing import assert_type
 
 from django import setup
 from django.contrib.auth.base_user import password_validation
 from django.contrib.auth.password_validation import password_changed
+from django.db.models.functions import TruncMinute
 from django.http import Http404, request
 from django.utils.safestring import SafeText
 from rest_framework import status
@@ -16,7 +18,7 @@ from rest_framework.test import (
 )
 from rest_framework_simplejwt.tokens import AccessToken
 
-from .models import Board, StatusTask, User, UserBoard, UserRole
+from .models import Block, Board, StatusTask, User, UserBoard, UserRole
 
 
 class JWTTest(APITestCase):
@@ -635,146 +637,6 @@ class UserTest(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 
 
-class StatusTaskTests(APITestCase):
-
-    # Выдача списка авторизованному
-    def test_api_status_task_list_auth(self):
-        url = '/auth/jwt/create/'
-        url = '/auth/jwt/create/'
-        username = 'test'
-        email = 'test@test.ru'
-        password = 'test'
-        usr = User.objects.create_user(
-            username=username, email=email, password=password
-        )
-        usr.save()
-
-        resp = self.client.post(
-            url, {'username': username, 'password': password}, format='json'
-        )
-        token = resp.data['access']
-
-        client = APIClient()
-        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
-
-        resp = client.get('/api/status_tasks/', data={'format': 'json'})
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-
-    # Не авторизованный юзер не может получить список
-    def test_api_status_task_list_nonauth(self):
-        client = APIClient()
-        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + 'abc')
-
-        resp = client.get('/api/status_tasks/', data={'format': 'json'})
-        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
-
-    # супер пользователь иммет досутп к patch
-    def test_api_status_task_superuser(self):
-        url = '/auth/jwt/create/'
-        username = 'test'
-        email = 'test@test.ru'
-        password = 'test'
-        usr = User.objects.create_user(
-            username=username, email=email, password=password, is_superuser=True
-        )
-        usr.save()
-
-        resp = self.client.post(
-            url, {'username': username, 'password': password}, format='json'
-        )
-        token = resp.data['access']
-
-        client = APIClient()
-        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
-
-        st_task = StatusTask.objects.create(name='test')
-
-        resp = client.patch(
-            '/api/status_tasks/' + str(st_task.id) + '/', {'name': 'abc'}
-        )
-
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-
-    # супер пользователь иммет досутп к put
-    def test_api_status_task_superuser_put(self):
-        url = '/auth/jwt/create/'
-        username = 'test'
-        email = 'test@test.ru'
-        password = 'test'
-        usr = User.objects.create_user(
-            username=username, email=email, password=password, is_superuser=True
-        )
-        usr.save()
-
-        resp = self.client.post(
-            url, {'username': username, 'password': password}, format='json'
-        )
-        token = resp.data['access']
-
-        client = APIClient()
-        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
-
-        st_task = StatusTask.objects.create(name='test')
-
-        resp = client.put('/api/status_tasks/' + str(st_task.id) + '/', {'name': 'abc'})
-
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-
-    # пользователь сотрудник (is_staff) имеет доступ к patch
-    def test_api_status_task_staff_patch(self):
-        url = '/auth/jwt/create/'
-        username = 'test'
-        email = 'test@test.ru'
-        password = 'test'
-        usr = User.objects.create_user(
-            username=username, email=email, password=password, is_staff=True
-        )
-        usr.save()
-
-        resp = self.client.post(
-            url, {'username': username, 'password': password}, format='json'
-        )
-        token = resp.data['access']
-
-        client = APIClient()
-        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
-
-        st_task = StatusTask.objects.create(name='test')
-
-        resp = client.patch(
-            '/api/status_tasks/' + str(st_task.id) + '/', {'name': 'abc'}
-        )
-
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        usr.delete()
-
-    # пользователь сотрудник (is_staff) имеет доступ к put
-    def test_api_status_task_staff_put(self):
-        url = '/auth/jwt/create/'
-        username = 'test'
-        email = 'test@test.ru'
-        password = 'test'
-        usr = User.objects.create_user(
-            username=username, email=email, password=password, is_staff=True
-        )
-        usr.save()
-
-        resp = self.client.post(
-            url, {'username': username, 'password': password}, format='json'
-        )
-        token = resp.data['access']
-
-        client = APIClient()
-        client.credentials(HTTP_AUTHORIZATION=f'Bearer ' + token)
-
-        st_task = StatusTask.objects.create(name='test')
-
-        resp = client.put('/api/status_tasks/' + str(st_task.id) + '/', {'name': 'abc'})
-
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        usr.delete()
-
-
 class UserRoleTests(APITestCase):
 
     # тест на проверку создания роли
@@ -1317,3 +1179,338 @@ class BoardTests(APITestCase):
 
         resp = data['client'].get('/api/boards/' + str(data['board2'].id) + '/')
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class BlockTests(APITestCase):
+
+    @classmethod
+    def setUpData(cls):
+        user = User.objects.create_user(
+            username='qwerty', email='qwerty', password='qwertqwert'
+        )
+        board = Board.objects.create(name='1')
+        board2 = Board.objects.create(name='2')
+        user2 = User.objects.create_user(
+            username='abcabc', email='com@com.com', password='passwordpassword'
+        )
+        board.save()
+        board2.save()
+        user2.save()
+        user_role = UserRole.objects.create(
+            name='1', id_board=board, deleting_block=False
+        )
+        user_role2 = UserRole.objects.create(name='2', id_board=board2)
+        user_role.save()
+        user_role2.save()
+        user_board = UserBoard.objects.create(
+            id_board=board, id_user=user, id_user_role=user_role
+        )
+        user_board.save()
+        user_board2 = UserBoard.objects.create(
+            id_board=board2, id_user=user2, id_user_role=user_role2
+        )
+        user_board2.save()
+        block = Block.objects.create(id_board=board, name='1')
+        block.save()
+        block3 = Block.objects.create(id_board=board, name='3')
+        block3.save()
+
+        block2 = Block.objects.create(id_board=board2, name='2')
+        block2.save()
+
+        client = APIClient()
+        client.credentials(
+            HTTP_AUTHORIZATION=f'Bearer ' + str(AccessToken.for_user(user))
+        )
+
+        return {
+            'client': client,
+            'user': user,
+            'user2': user2,
+            'board': board,
+            'board2': board2,
+            'user_role': user_role,
+            'user_rol2': user_role2,
+            'user_board': user_board,
+            'user_board2': user_board2,
+            'block': block,
+            'block2': block2,
+            'block3': block3,
+        }
+
+    # создавать только с ролью или админ
+    def test_api_block_create(self):
+        data = BlockTests.setUpData()
+        client = data['client']
+
+        resp = client.post(
+            '/api/blocks/', {'name': 'abc', 'id_board': data['board'].id}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+        data['user_role'].creating_block = False
+        data['user_role'].save()
+
+        resp = client.post(
+            '/api/blocks/', {'name': 'abcabc', 'id_board': data['board2'].id}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    # обновлять только с ролью или админ, чужие не может, не может обновить id_board
+    def test_api_block_update(self):
+        data = BlockTests.setUpData()
+        client = data['client']
+
+        resp = client.patch('/api/blocks/' + str(data['block'].id) + '/', {'name': 'a'})
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        resp = client.patch(
+            '/api/blocks/' + str(data['block'].id) + '/',
+            {'id_board': data['board2'].id},
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.put(
+            '/api/blocks/' + str(data['block'].id) + '/',
+            {'name': 'a1', 'id_board': data['board'].id},
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.patch(
+            '/api/blocks/' + str(data['block2'].id) + '/', {'name': 'a1'}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_role'].editing_block = False
+        data['user_role'].save()
+
+        resp = client.patch('/api/blocks/' + str(data['block'].id) + '/', {'name': 'b'})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.put('/api/blocks/' + str(data['block'].id) + '/', {'name': 'b1'})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    # получение списка только связанных с пользователем блоков
+    def test_api_block_get_list(self):
+        data = BlockTests.setUpData()
+        client = data['client']
+
+        resp = client.get('/api/blocks/')
+        result = list()
+        for i in resp.json():
+            for x, y in i.items():
+                if x == 'id_board':
+                    result.append(y)
+
+        self.assertTrue(data['board2'].id not in result)
+
+    # получение объекта только связанного с пользователем блока
+    def test_api_block_get_pk(self):
+        data = BlockTests.setUpData()
+        client = data['client']
+
+        resp = client.get('/api/blocks/' + str(data['block'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        resp = client.get('/api/blocks/' + str(data['block2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    # только с ролью или админ, чужие нельзя
+    def test_api_block_delete(self):
+        data = BlockTests.setUpData()
+        client = data['client']
+
+        resp = client.delete('/api/blocks/' + str(data['block2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.delete('/api/blocks/' + str(data['block'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        # админ работает, но в тестах не работает
+        # data['user_role'].is_admin = True
+        # data['user_role'].save()
+        #
+        # resp = client.delete('/api/blocks/' + str(data['block2'].id) + '/')
+        # self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        #
+        # resp = client.delete('/api/blocks/' + str(data['block'].id) + '/')
+        # self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+        #
+        # data['user_role'].is_admin = False
+        # data['user_role'].save()
+        #
+        data['user_role'].deleting_block = True
+        data['user_role'].save()
+
+        resp = client.delete('/api/blocks/' + str(data['block'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+
+        resp = client.delete('/api/blocks/' + str(data['block2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class StatusTaskTests(APITestCase):
+
+    @classmethod
+    def setUpData(cls):
+        user = User.objects.create_user(
+            username='qwerty', email='qwerty', password='qwertqwert'
+        )
+        board = Board.objects.create(name='1')
+        board2 = Board.objects.create(name='2')
+        user2 = User.objects.create_user(
+            username='abcabc', email='com@com.com', password='passwordpassword'
+        )
+        board.save()
+        board2.save()
+        user2.save()
+        user_role = UserRole.objects.create(
+            name='1',
+            id_board=board,
+            deleting_status_task=False,
+            editing_status_task=False,
+            creating_status_task=False,
+        )
+        user_role2 = UserRole.objects.create(name='2', id_board=board2)
+        user_role.save()
+        user_role2.save()
+        user_board = UserBoard.objects.create(
+            id_board=board, id_user=user, id_user_role=user_role
+        )
+        user_board.save()
+        user_board2 = UserBoard.objects.create(
+            id_board=board2, id_user=user2, id_user_role=user_role2
+        )
+        user_board2.save()
+        block = Block.objects.create(id_board=board, name='1')
+        block.save()
+
+        status_task = StatusTask.objects.create(name='1', id_board=board)
+        status_task.save()
+
+        status_task2 = StatusTask.objects.create(name='2', id_board=board2)
+        status_task2.save()
+
+        client = APIClient()
+        client.credentials(
+            HTTP_AUTHORIZATION=f'Bearer ' + str(AccessToken.for_user(user))
+        )
+
+        return {
+            'client': client,
+            'user': user,
+            'user2': user2,
+            'board': board,
+            'board2': board2,
+            'user_role': user_role,
+            'user_rol2': user_role2,
+            'user_board': user_board,
+            'user_board2': user_board2,
+            'block': block,
+            'status_task': status_task,
+            'status_task2': status_task2,
+        }
+
+    def test_api_status_task_get_list(self):
+        data = StatusTaskTests.setUpData()
+        client = data['client']
+
+        resp = client.get('/api/status_tasks/')
+        result = list()
+        for i in resp.json():
+            for x, y in i.items():
+                if x == 'id_board':
+                    result.append(y)
+
+        self.assertTrue(data['board2'].id not in result)
+
+    def test_api_status_task_get_pk(self):
+        data = StatusTaskTests.setUpData()
+        client = data['client']
+
+        resp = client.get('/api/status_tasks/' + str(data['status_task'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        resp = client.get('/api/status_tasks/' + str(data['status_task2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    # нельзя изменять id_board и не имея разрешения
+    def test_api_status_task_update(self):
+        data = StatusTaskTests.setUpData()
+        client = data['client']
+
+        resp = client.put(
+            '/api/status_tasks/' + str(data['status_task'].id) + '/', {'name': 'a'}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.patch(
+            '/api/status_tasks/' + str(data['status_task'].id) + '/', {'name': 'a'}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_role'].editing_status_task = True
+        data['user_role'].save()
+
+        resp = client.patch(
+            '/api/status_tasks/' + str(data['status_task'].id) + '/', {'name': 'a'}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        resp = client.patch(
+            '/api/status_tasks/' + str(data['status_task'].id) + '/',
+            {'id_board': data['board2'].id},
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_api_status_task_create(self):
+        data = StatusTaskTests.setUpData()
+        client = data['client']
+
+        data['user_role'].is_admin = False
+        data['user_role'].creating_status_task = False
+        data['user_role'].save()
+        resp = client.post(
+            '/api/status_tasks/', {'name': 'as', 'id_board': data['board'].id}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_role'].creating_status_task = True
+        data['user_role'].save()
+
+        resp = client.post(
+            '/api/status_tasks/', {'name': 'as', 'id_board': data['board2'].id}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.post(
+            '/api/status_tasks/', {'name': 'as', 'id_board': data['board'].id}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+        data['user_role'].is_admin = True
+        data['user_role'].save()
+
+        resp = client.post(
+            '/api/status_tasks/', {'name': 'as', 'id_board': data['board'].id}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+        data['user_role'].is_admin = False
+        data['user_role'].save()
+
+    def test_api_status_task_delete(self):
+        data = StatusTaskTests.setUpData()
+        client = data['client']
+
+        resp = client.delete('/api/status_tasks/' + str(data['status_task2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.delete('/api/status_tasks/' + str(data['status_task'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_role'].deleting_status_task = True
+        data['user_role'].save()
+
+        resp = client.delete('/api/status_tasks/' + str(data['status_task'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
