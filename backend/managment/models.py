@@ -1,3 +1,5 @@
+import datetime
+
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 
@@ -60,7 +62,7 @@ class Task(models.Model):
     )
     text = models.CharField(max_length=50)
     description = models.CharField(max_length=300, blank=True, null=True)
-    date = models.DateField()
+    date = models.DateField(default=datetime.date.today())
 
 
 class UserRole(models.Model):
@@ -75,6 +77,11 @@ class UserRole(models.Model):
     add_members = models.BooleanField(default=True)
     delete_members = models.BooleanField(default=False)
     edit_members = models.BooleanField(default=False)
+
+    creating_comment = models.BooleanField(default=True)
+    deleting_all_comment = models.BooleanField(default=False)
+    deleting_ur_comment = models.BooleanField(default=True)
+    editing_ur_comment = models.BooleanField(default=True)
 
     creating_task = models.BooleanField(default=True)
     deleting_task = models.BooleanField(default=True)

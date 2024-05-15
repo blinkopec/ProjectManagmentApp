@@ -384,18 +384,39 @@ class TaskAPIView(ModelViewSet):
     serializer_class = TaskSerializer
     permission_classes = [IsUserRelateToTaskOrReadOnly]
 
-    # Выводит только те задачи, которые принадлежат к доскам, в которых есть пользователь
-    def get_queryset(self):
-        user = self.request.user
-        id_board = (
-            UserBoard.objects.all()
-            .filter(id_user=user.id)
-            .values_list("id_board", flat=True)
+    def retrieve(self, request, pk=None):
+        instance = self.get_object()
+
+        check_id_board = UserBoard.objects.filter(
+            id_board=instance.id_block.id_board, id_user=request.user.id
+        ).first()
+
+        if not check_id_board:
+            return Response('access denied', status.HTTP_403_FORBIDDEN)
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+    def list(self, request):
+        boards = UserBoard.objects.filter(id_user=request.user.id).values_list(
+            'id_board'
         )
-        id_blocks = (
-            Block.objects.all()
-            .filter(id_board__in=id_board)
-            .values_list("id", flat=True)
+        blocks = Block.objects.filter(id_board__in=boards).values_list('id')
+        result = self.queryset.filter(id_block__in=blocks)
+
+        serializer = self.get_serializer(data=result, many=True)
+        serializer.is_valid()
+        return Response(serializer.data, status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'])
+    def get_by_id_block(self, request, pk=None):
+        instance = Block.objects.get(id=pk)
+        check_pk = UserBoard.objects.filter(
+            id_board=instance.id_board, id_user=request.user.id
         )
-        tasks = self.queryset.filter(id_block__in=id_blocks)
-        return tasks
+        if not check_pk:
+            return Response('access denied', status.HTTP_403_FORBIDDEN)
+        result = self.queryset.filter(id_block=pk)
+        serializer = self.get_serializer(data=result, many=True)
+        serializer.is_valid()
+        return Response(serializer.data, status.HTTP_200_OK)

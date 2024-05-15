@@ -1,3 +1,4 @@
+from asyncio import start_unix_server
 from collections import namedtuple
 from inspect import formatannotation
 from typing import assert_type
@@ -5,20 +6,18 @@ from typing import assert_type
 from django import setup
 from django.contrib.auth.base_user import password_validation
 from django.contrib.auth.password_validation import password_changed
+from django.db.models.fields import return_None
 from django.db.models.functions import TruncMinute
 from django.http import Http404, request
 from django.utils.safestring import SafeText
 from rest_framework import status
 from rest_framework.reverse import reverse
-from rest_framework.test import (
-    APIClient,
-    APIRequestFactory,
-    APITestCase,
-    force_authenticate,
-)
+from rest_framework.test import (APIClient, APIRequestFactory, APITestCase,
+                                 force_authenticate)
 from rest_framework_simplejwt.tokens import AccessToken
 
-from .models import Block, Board, StatusTask, User, UserBoard, UserRole
+from .models import (Block, Board, Comment, StatusTask, Task, User, UserBoard,
+                     UserRole)
 
 
 class JWTTest(APITestCase):
@@ -1514,3 +1513,573 @@ class StatusTaskTests(APITestCase):
 
         resp = client.delete('/api/status_tasks/' + str(data['status_task'].id) + '/')
         self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+
+
+class TaskTests(APITestCase):
+    @classmethod
+    def setUpData(cls):
+        user = User.objects.create(
+            username='username', email='email@email.com', password='passwordpassword'
+        )
+        user2 = User.objects.create(
+            username='username2',
+            email='email2@email2.com',
+            password='password2password2',
+        )
+        user.save()
+        user2.save()
+
+        board = Board.objects.create(name='1')
+        board2 = Board.objects.create(name='2')
+        board.save()
+        board2.save()
+
+        user_role1 = UserRole.objects.create(
+            name='1.1',
+            id_board=board,
+            creating_task=False,
+            deleting_task=False,
+            editing_task=False,
+        )
+        user_role2 = UserRole.objects.create(name='1.2', id_board=board2, deleting_task=False, creating_task=False, editing_task=False)
+        user_role1.save()
+        user_role2.save()
+
+        user_board1 = UserBoard.objects.create(
+            id_user=user, id_board=board, id_user_role=user_role1
+        )
+        user_board1_2 = UserBoard.objects.create(
+            id_user=user2, id_board=board, id_user_role=user_role1
+        )
+        user_board2 = UserBoard.objects.create(
+            id_user=user2, id_board=board2, id_user_role=user_role2
+        )
+        user_board1.save()
+        user_board1_2.save()
+        user_board2.save()
+
+        block1 = Block.objects.create(name='1', id_board=board)
+        block2 = Block.objects.create(name='2', id_board=board2)
+        block1_2 = Block.objects.create(name='3', id_board=board)
+        block1.save()
+        block2.save()
+        block1_2.save()
+
+        status_task1 = StatusTask.objects.create(name='1', id_board=board)
+        status_task2 = StatusTask.objects.create(name='2', id_board=board2)
+        status_task1.save()
+        status_task2.save()
+
+        task1 = Task.objects.create(text='1', id_block=block1, id_status_task = status_task1)
+        task1_2 = Task.objects.create(text='1_2', id_block=block1, id_status_task= status_task1)
+        task2 = Task.objects.create(text='2', id_block=block2, id_status_task= status_task2)
+        task1.save()
+        task2.save()
+        task1_2.save()
+
+        client = APIClient()
+        client.credentials(
+            HTTP_AUTHORIZATION=f'Bearer ' + str(AccessToken.for_user(user))
+        )
+
+        result = {
+            'user': user,
+            'user2': user2,
+            'board': board,
+            'board2': board2,
+            'user_role1': user_role1,
+            'user_role2': user_role2,
+            'user_board1': user_board1,
+            'user_board1_2': user_board1_2,
+            'user_board2': user_board2,
+            'block1': block1,
+            'block2': block2,
+            'block1_2':block1_2,
+            'status_task1': status_task1,
+            'status_task2': status_task2,
+            'task1': task1,
+            'task1_2': task1_2,
+            'task2': task2,
+            'client': client,
+        }
+
+        return result
+
+    def test_api_task_update(self):
+        data = TaskTests.setUpData()
+        client = data['client']
+
+        resp = client.patch('/api/tasks/' + str(data['task1'].id) +  '/', {'text': 'abc'})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.put('/api/tasks/' + str(data['task1'].id) + '/', {'text': 'abc', 'id_block': data['block1'].id, 'id_status_task': data['status_task1'].id})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.patch('/api/tasks/' + str(data['task2'].id) +  '/', {'text': 'abc'})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.put('/api/tasks/' + str(data['task2'].id) + '/', {'text': 'abc', 'id_block': data['block1'].id, 'id_status_task': data['status_task1'].id})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_role1'].editing_task = True
+        data['user_role1'].save()
+
+        resp = client.patch('/api/tasks/' + str(data['task1'].id) +  '/', {'text': 'abc'})
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        resp = client.put('/api/tasks/' + str(data['task1'].id) + '/', {'text': 'abc', 'id_block': data['block1'].id, 'id_status_task': data['status_task1'].id})
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        resp = client.patch('/api/tasks/' + str(data['task2'].id) +  '/', {'text': 'abc'})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.put('/api/tasks/' + str(data['task2'].id) + '/', {'text': 'abc', 'id_block': data['block1'].id, 'id_status_task':data['status_task1'].id})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.patch('/api/tasks/' + str(data['task1'].id) + '/', {'id_block': data['block1_2'].id})
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        data['user_role1'].editing_task = False
+        data['user_role1'].save()
+
+        data['user_board1'].is_admin = True
+        data['user_board1'].save()
+
+        resp = client.patch('/api/tasks/' + str(data['task1'].id) + '/', {'text': 'abc'})
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        resp = client.put('/api/tasks/' + str(data['task1'].id) + '/', {'text': 'abc123', 'id_block': data['block1'].id, 'id_status_task':data['status_task1'].id})
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        resp = client.patch('/api/tasks/' + str(data['task2'].id) +  '/', {'text': 'abc'})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.put('/api/tasks/' + str(data['task2'].id) + '/', {'text': 'abc', 'id_block': data['block1'].id,'id_status_task':data['status_task1'].id})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_board1'].is_admin = False
+        data['user_board1'].save()
+
+
+    def test_api_task_create(self):
+        data = TaskTests.setUpData()
+        client = data['client']
+
+        resp = client.post('/api/tasks/', {'text': 'abc', 'id_block': data['block2'].id, 'id_status_task': data['status_task2'].id})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.post('/api/tasks/', {'text':'abc', 'id_block': data['block2'].id, 'id_status_task':data['status_task2']})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_role1'].creating_task= True
+        data['user_role1'].save()
+
+        resp = client.post('/api/tasks/', {'text': 'abc', 'id_block': data['block1'].id, 'id_status_task':data['status_task1'].id})
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+        resp = client.post('/api/tasks/', {'text':'abc', 'id_block': data['block2'].id, 'id_status_task':data['status_task2'].id})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_role1'].creating_task = False
+        data['user_role1'].save()
+        data['user_board1'].is_admin = True
+        data['user_board1'].save()
+
+        resp = client.post('/api/tasks/', {'text': 'abc', 'id_block': data['block1'].id,'id_status_task':data['status_task1'].id})
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+        resp = client.post('/api/tasks/', {'text':'abc', 'id_block': data['block2'].id,'id_status_task': data['status_task2'].id})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+
+        data['user_board1'].is_admin = False
+        data['user_board1'].save()
+
+
+
+    def test_api_task_get_list(self):
+        data = TaskTests.setUpData()
+        client = data['client']
+
+        resp = client.get('/api/tasks/')
+        result = list()
+        for i in resp.json():
+            for x, y in i.items():
+                if x == 'id_block':
+                    result.append(y)
+
+        self.assertTrue(data['block2'].id not in result)
+
+    def test_api_task_get_pk(self):
+        data = TaskTests.setUpData()
+        client = data['client']
+
+        resp = client.get('/api/tasks/' + str(data['task1'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        resp = client.get('/api/tasks/' + str(data['task2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_api_task_custom_get_id_block(self):
+        data = TaskTests.setUpData()
+        client = data['client']
+
+        resp = client.get('/api/tasks/' + str(data['block1'].id) + '/get_by_id_block/')
+        result = list()
+        for i in resp.json():
+            for x, y in i.items():
+                if x == 'id_block':
+                    result.append(y)
+
+        self.assertTrue(data['block2'].id not in result)
+
+    def test_api_task_delete(self):
+        data = TaskTests.setUpData()
+        client = data['client']
+
+        resp = client.delete('/api/tasks/' + str(data['task1'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.delete('/api/tasks/' + str(data['task2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_role1'].deleting_task= True
+        data['user_role1'].save()
+
+        resp = client.delete('/api/tasks/' + str(data['task1'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+
+        resp = client.delete('/api/tasks/' + str(data['task2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_role1'].deleting_task= False
+        data['user_role1'].save()
+        data['user_board1'].is_admin = True
+        data['user_board1'].save()
+
+        resp = client.delete('/api/tasks/' + str(data['task1_2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+
+        resp = client.delete('/api/tasks/' + str(data['task2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_board1'].is_admin = False
+        data['user_board1'].save()
+
+
+class CommentTests(APITestCase):
+    @classmethod
+    def setUpData(cls):
+        user = User.objects.create(
+            username='username', email='email@email.com', password='passwordpassword'
+        )
+        user2 = User.objects.create(
+            username='username2',
+            email='email2@email2.com',
+            password='password2password2',
+        )
+        user.save()
+        user2.save()
+
+        board = Board.objects.create(name='1')
+        board2 = Board.objects.create(name='2')
+        board.save()
+        board2.save()
+
+        user_role1 = UserRole.objects.create(
+            name='1.1',
+            id_board=board,
+            creating_task=False,
+            deleting_task=False,
+            editing_task=False,
+        )
+        user_role2 = UserRole.objects.create(name='1.2', id_board=board2, deleting_all_comment=False, deleting_ur_comment=False, creating_comment=False, editing_ur_comment=False)
+        user_role1.save()
+        user_role2.save()
+
+        user_board1 = UserBoard.objects.create(
+            id_user=user, id_board=board, id_user_role=user_role1
+        )
+        user_board1_2 = UserBoard.objects.create(
+            id_user=user2, id_board=board, id_user_role=user_role1
+        )
+        user_board2 = UserBoard.objects.create(
+            id_user=user2, id_board=board2, id_user_role=user_role2
+        )
+        user_board1.save()
+        user_board1_2.save()
+        user_board2.save()
+
+        block1 = Block.objects.create(name='1', id_board=board)
+        block2 = Block.objects.create(name='2', id_board=board2)
+        block1.save()
+        block2.save()
+
+        status_task1 = StatusTask.objects.create(name='1', id_board=board)
+        status_task2 = StatusTask.objects.create(name='2', id_board=board2)
+        status_task1.save()
+        status_task2.save()
+
+        task1 = Task.objects.create(text='1', id_block=block1, id_status_task = status_task1)
+        task2 = Task.objects.create(text='2', id_block=block2, id_status_task= status_task2)
+        task1.save()
+        task2.save()
+
+        comment1 = Comment.objects.create(id_user=user, id_task=task1, text='abc')
+        comment1_2 = Comment.objects.create(id_user=user2, id_task=task1, text='abc')
+        comment2 = Comment.objects.create(id_user=user2, id_task=task2, text='abc')
+        comment1.save()
+        comment1_2.save()
+        comment2.save()
+
+        client = APIClient()
+        client.credentials(
+            HTTP_AUTHORIZATION=f'Bearer ' + str(AccessToken.for_user(user))
+        )
+
+        result = {
+            'user': user,
+            'user2': user2,
+            'board': board,
+            'board2': board2,
+            'user_role': user_role1,
+            'user_role2': user_role2,
+            'user_board': user_board1,
+            'user_board1_2': user_board1_2,
+            'user_board2': user_board2,
+            'block1': block1,
+            'block2': block2,
+            'status_task1': status_task1,
+            'status_task2': status_task2,
+            'task1': task1,
+            'task2': task2,
+            'client': client,
+            'comment1': comment1,
+            'comment1_2': comment1_2,
+            'comment2': comment2,
+        }
+
+        return result
+
+    # обновлять можно с разрешением и только свои комментарии, is_admin может редактировать только свои комментарии
+    def test_api_comment_update(self):
+        data = CommentTests.setUpData()
+        client = data['client']
+
+        resp = client.put('/api/comments/' + str(data['comment1'].id) + '/', {'text': 'abc'})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.patch('/api/comments/' + str(data['comment1'].id) + '/', {'text':'abc'})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.patch('/api/comments/' + str(data['comment1_2'].id) + '/', {'text': 'abc'})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.patch('/api/comments/' + str(data['comment2'].id) + '/', {'text':'abc'})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        
+        data['user_role'].editing_ur_comment = True
+        data['user_role'].save()
+
+        resp = client.patch('/api/comments/' + str(data['comment1'].id) + '/', {'name': 'abc'})
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        resp = client.patch('/api/comments/' + str(data['comment1_2'].id) + '/', {'text': 'abc'})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.patch('/api/comments/' + str(data['comment2'].id) + '/', {'text':'abc'})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_role'].editing_ur_comment = False
+        data['user_role'].save()
+
+        data['user_board'].is_admin = True
+        data['user_board'].save()
+
+        resp = client.patch('/api/comments/' + str(data['comment1'].id) + '/', {'name': 'abc'})
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        resp = client.patch('/api/comments/' + str(data['comment1_2'].id) + '/', {'text': 'abc'})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.patch('/api/comments/' + str(data['comment2'].id) + '/', {'text':'abc'})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_board'].is_admin = True
+        data['user_board'].save()
+
+
+    # создавать можно с разрешением или is_admin
+    # нельзя создавать комментарии от другого пользователя
+    def test_api_comment_create(self):
+        data = CommentTests.setUpData()
+        client = data['client']       
+
+        resp = client.post('/api/comments/', {'text':'abc', 'id_task':data['task1'].id, 'id_user':data['user'].id})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.post('/api/comments/', {'text':'abc', 'id_task':data['task2'].id, 'id_user':data['user'].id})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.post('/api/comments/', {'text':'abc', 'id_task':data['task1'].id, 'id_user':data['user2'].id})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        
+        data['user_role'].creating_comment = True
+        data['user_role'].save()
+
+        resp = client.post('/api/comments/', {'text':'abc', 'id_task':data['task1'].id, 'id_user':data['user'].id})
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+        resp = client.post('/api/comments/', {'text':'abc', 'id_task':data['task1'].id, 'id_user':data['user2'].id})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.post('/api/comments/', {'text':'abc', 'id_task':data['task1'].id, 'id_user':data['user2'].id})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_role'].creating_comment = False
+        data['user_role'].save()
+
+        data['user_board'].is_admin =True
+        data['user_board'].save()
+
+        resp = client.post('/api/comments/', {'text':'abc', 'id_task':data['task1'].id, 'id_user':data['user'].id})
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+        resp = client.post('/api/comments/', {'text':'abc', 'id_task':data['task1'].id, 'id_user':data['user2'].id})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.post('/api/comments/', {'text':'abc', 'id_task':data['task1'].id, 'id_user':data['user2'].id})
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_board'].is_admin =True
+        data['user_board'].save()
+
+    # можно получить только те комментарии, которые относятся к доскам пользователя
+    def test_api_comment_get_pk(self):
+        data = CommentTests.setUpData()
+        client = data['client']
+
+        resp = client.get('/api/comments/' + str(data['comment1'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        resp = client.get('/api/tasks/' + str(data['comment2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+
+    # получение списка досок, которые относятся к пользователю
+    def test_api_comment_get_list(self):
+        data = CommentTests.setUpData()
+        client = data['client']
+
+        resp = client.get('/api/comments/')
+        result = list()
+        for i in resp.json():
+            for x, y in i.items():
+                if x == 'id_task':
+                    result.append(y)
+
+        self.assertTrue(data['task2'].id not in result)
+
+    #custom action
+    def test_api_commnet_get_by_id_user(self):
+        data = CommentTests.setUpData()
+        client = data['client']
+
+        resp = client.get('/api/comments/' + str(data['user'].id) + '/get_by_id_user/')
+        result = list()
+        for i in resp.json():
+            for x, y in i.items():
+                if x == 'id_user':
+                    result.append(y)
+
+        self.assertTrue(data['user2'].id not in result)       
+
+    #custom action
+    def test_api_comment_get_by_id_task(self):
+        data = CommentTests.setUpData()
+        client = data['client']
+
+        resp = client.get('/api/comments/' + str(data['task1'].id) + '/get_by_id_task/')
+        result = list()
+        for i in resp.json():
+            for x, y in i.items():
+                if x == 'id_task':
+                    result.append(y)
+
+        self.assertTrue(data['task2'].id not in result)       
+
+
+    # #custom action
+    # def test_api_comment_get_by_id_user_and_task(self):
+    #     data = CommentTests.setUpData()
+    #     client = data['client']
+    #
+    #     resp = client.get('/api/comments/' + str(data['task1'].id) + '/get_by_id_user_and_task/')
+    #     result = list()
+    #     for i in resp.json():
+    #         for x, y in i.items():
+    #             if x == 'id_task':
+    #                 result.append(y)
+    #
+    #     self.assertTrue(data['task2'].id not in result)       
+
+    # проверка на разрешение удалять свои комментарии
+    # проверка is_admin
+    # проверка разрешения удалять все комментарии
+    def test_api_comment_delete(self):
+        data = CommentTests.setUpData()
+        client = data['client']
+
+        resp = client.delete('/api/comments/' + str(data['comment1'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.delete('/api/comments/' + str(data['comment2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.delete('/api/comments/' + str(data['comment1_2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_role'].deleting_ur_comment = True
+        data['user_role'].save()
+
+        resp = client.delete('/api/comments/' + str(data['comment1'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+
+        resp = client.delete('/api/comments/' + str(data['comment2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.delete('/api/comments/' + str(data['comment1_2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        data['user_role'].deleting_ur_comment = False
+        data['user_role'].save()
+
+        data['user_role'].deleting_all_comment = True
+        data['user_role'].save()
+
+        resp = client.delete('/api/comments/' + str(data['comment1'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+
+        resp = client.delete('/api/comments/' + str(data['comment2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.delete('/api/comments/' + str(data['comment1_2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+
+        data['user_role'].deleting_all_comment = True
+        data['user_role'].save()
+
+        data['user_board'].is_admin = True
+        data['user_board'].save()
+        
+        resp = client.delete('/api/comments/' + str(data['comment1'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+
+        resp = client.delete('/api/comments/' + str(data['comment2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        resp = client.delete('/api/comments/' + str(data['comment1_2'].id) + '/')
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+
+        data['user_board'].is_admin = True
+        data['user_board'].save()
