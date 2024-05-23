@@ -20,6 +20,7 @@ from rest_framework.viewsets import ModelViewSet
 from .models import Block, Board, Comment, StatusTask, Task, User, UserBoard, UserRole
 from .permissions import (
     IsAdminOrReadOnly,
+    IsOwnerCommentOrRole,
     IsOwnerOrReadOnly,
     IsUserOrReadOnly,
     IsUserOrUserRoleCanEditDelete,
@@ -252,6 +253,28 @@ class BoardAPIView(ModelViewSet):
     serializer_class = BoardSerializer
     permission_classes = [IsUserRelateToBoardOrReadOnly]
 
+    @action(detail=False, methods=['get'])
+    def get_users_boards(self, request):
+        boards = UserBoard.objects.filter(id_user=request.user.id, is_admin=True).values_list(
+            'id_board'
+        )
+        result = self.queryset.filter(id__in=boards)
+
+        serializer = self.get_serializer(data=result, many=True)
+        serializer.is_valid()
+        return Response(serializer.data, status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'])
+    def get_user_in_boards(self, request):
+        boards = UserBoard.objects.filter(id_user=request.user.id, is_admin=False).values_list(
+            'id_board'
+        )
+        result = self.queryset.filter(id__in=boards)
+
+        serializer = self.get_serializer(data=result, many=True)
+        serializer.is_valid()
+        return Response(serializer.data, status.HTTP_200_OK)
+
     def retrieve(self, request, pk=None):
         instance = self.get_object()
 
@@ -331,21 +354,54 @@ class BoardAPIView(ModelViewSet):
 class CommentAPIView(ModelViewSet):
     queryset = Comment.objects.all()
     serializer_class = CommentSerializer
-    permission_classes = [IsOwnerOrReadOnly]
+    permission_classes = [IsOwnerCommentOrRole]
 
-    # Чтобы выводило только те комменты, которые относятся к таскам,
-    # которые принадлежат доскам, в которых есть пользователь
-    def get_queryset(self):
-        user = self.request.user
-        user_boards = UserBoard.objects.filter(id_user=user.id)
-        board_ids = [board.id_board for board in user_boards]
-        blocks_ids = Block.objects.filter(id_board__in=board_ids).values_list(
-            "id", flat=True
+    def retrieve(self, request, pk=None):
+        instance = self.get_object()
+
+        check_id_board = UserBoard.objects.filter(
+            id_board=instance.id_task.id_block.id_board.id, id_user=request.user.id
+        ).first()
+
+        print(check_id_board.is_admin)
+
+        if not check_id_board:
+            return Response('access denied', status.HTTP_403_FORBIDDEN)
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+    def list(self, request):
+        boards = UserBoard.objects.filter(id_user=request.user.id).values_list(
+            'id_board'
         )
-        task_ids = Task.objects.filter(id_block__in=blocks_ids).values_list(
-            "id", flat=True
+        blocks = Block.objects.filter(id_board__in=boards).values_list('id')
+        tasks = Task.objects.filter(id_block__in=blocks).values_list('id')
+        result = self.queryset.filter(id_task__in=tasks)
+
+        serializer = self.get_serializer(data=result, many=True)
+        serializer.is_valid()
+        return Response(serializer.data, status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'])
+    def get_by_id_user(self, request, pk=None):
+        result = self.queryset.filter(id_user=pk)
+        serializer = self.get_serializer(data=result, many=True)
+        serializer.is_valid()
+        return Response(serializer.data, status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'])
+    def get_by_id_task(self, request, pk=None):
+        instance = Task.objects.get(id=pk)
+        check_pk = UserBoard.objects.filter(
+            id_board=instance.id_block.id_board.id, id_user=request.user.id
         )
-        return self.queryset.filter(id_task__in=task_ids)
+        if not check_pk:
+            return Response('access denied', status.HTTP_403_FORBIDDEN)
+        result = self.queryset.filter(id_task=pk)
+        serializer = self.get_serializer(data=result, many=True)
+        serializer.is_valid()
+        return Response(serializer.data, status.HTTP_200_OK)
 
 
 # Block

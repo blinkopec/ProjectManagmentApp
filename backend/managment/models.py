@@ -72,13 +72,11 @@ class UserRole(models.Model):
         'Board', related_name='roles', on_delete=models.CASCADE
     )
 
-    commenting = models.BooleanField(default=True)
-
     add_members = models.BooleanField(default=True)
     delete_members = models.BooleanField(default=False)
     edit_members = models.BooleanField(default=False)
 
-    creating_comment = models.BooleanField(default=True)
+    commenting = models.BooleanField(default=True)
     deleting_all_comment = models.BooleanField(default=False)
     deleting_ur_comment = models.BooleanField(default=True)
     editing_ur_comment = models.BooleanField(default=True)

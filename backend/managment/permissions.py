@@ -10,10 +10,11 @@ from django.db.models.functions import TruncYear
 from django.db.models.query import FlatValuesListIterable
 from django.middleware.csrf import is_same_domain
 from django.urls import register_converter
+from django.utils.autoreload import request_finished
 from django.utils.encoding import repercent_broken_unicode
 from rest_framework import permissions
 
-from .models import Block, Board, Comment, StatusTask, UserBoard, UserRole
+from .models import Block, Board, Comment, StatusTask, Task, User, UserBoard, UserRole
 
 
 class ReadOnly(permissions.BasePermission):
@@ -164,6 +165,73 @@ class IsUserRelateToBlockOrReadOnly(permissions.BasePermission):
 # delete - разрешение на удаление своих комментариев, разрешение на удаление всех комментариев, is_admin, но нельзя удалять не из своей доски
 # create - можно создавать с разрешением или is_admin, но нельзя создавать комментарии от имени другого пользователя или не в свою доску
 # update - можно редактировать с разрешением и только свои комментарии, is_admin может редактировать только свои комментарии
+class IsOwnerCommentOrRole(permissions.BasePermission):
+    def has_permission(self, request, view):
+        if request.method == 'POST':
+            if (
+                request.user.is_authenticated
+                and request.user.id
+                == User.objects.get(id=request.data.get('id_user')).id
+            ):
+                task = Task.objects.get(id=request.data.get('id_task'))
+
+                user_board = UserBoard.objects.filter(
+                    id_user=request.user.id, id_board=task.id_block.id_board.id
+                ).first()
+
+                if not user_board:
+                    return False
+
+                if user_board.is_admin:
+                    return True
+                if user_board.id_user_role.commenting:
+                    return True
+
+            return False
+
+        if request.user.is_authenticated:
+            return True
+
+    def has_object_permission(self, request, view, obj):
+        if not request.user.is_authenticated:
+            return False
+
+        if request.user.is_superuser:
+            return True
+
+        if request.method == 'GET':
+            return True
+
+        if request.method == 'PUT':
+            return False
+
+        user_board = (
+            UserBoard.objects.select_related('id_user_role')
+            .filter(id_user=request.user.id, id_board=obj.id_task.id_block.id_board.id)
+            .first()
+        )
+
+        if not user_board:
+            return False
+
+        if request.method == 'PATCH' and request.user == obj.id_user:
+            if user_board.is_admin:
+                return True
+            if user_board.id_user_role.editing_ur_comment:
+                return True
+
+            return False
+
+        if request.method == 'DELETE':
+            if user_board.id_user_role.deleting_all_comment:
+                return True
+            if user_board.is_admin:
+                return True
+            if request.user == obj.id_user:
+                if user_board.id_user_role.deleting_ur_comment:
+                    return True
+
+            return False
 
 
 # Task

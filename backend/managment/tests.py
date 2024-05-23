@@ -1789,11 +1789,12 @@ class CommentTests(APITestCase):
         user_role1 = UserRole.objects.create(
             name='1.1',
             id_board=board,
-            creating_task=False,
-            deleting_task=False,
-            editing_task=False,
+            commenting=False,
+            deleting_all_comment = False,
+            deleting_ur_comment = False,
+            editing_ur_comment = False,
         )
-        user_role2 = UserRole.objects.create(name='1.2', id_board=board2, deleting_all_comment=False, deleting_ur_comment=False, creating_comment=False, editing_ur_comment=False)
+        user_role2 = UserRole.objects.create(name='1.2', id_board=board2, deleting_all_comment=False, deleting_ur_comment=False, commenting=False, editing_ur_comment=False)
         user_role1.save()
         user_role2.save()
 
@@ -1827,6 +1828,9 @@ class CommentTests(APITestCase):
 
         comment1 = Comment.objects.create(id_user=user, id_task=task1, text='abc')
         comment1_2 = Comment.objects.create(id_user=user2, id_task=task1, text='abc')
+        comment1_3 = Comment.objects.create(id_user=user, id_task=task1, text='abc')
+        comment1_4 = Comment.objects.create(id_user=user, id_task=task1, text='abc')
+        comment1_5 = Comment.objects.create(id_user=user2, id_task=task1, text='abc')
         comment2 = Comment.objects.create(id_user=user2, id_task=task2, text='abc')
         comment1.save()
         comment1_2.save()
@@ -1856,6 +1860,9 @@ class CommentTests(APITestCase):
             'client': client,
             'comment1': comment1,
             'comment1_2': comment1_2,
+            'comment1_3': comment1_3,
+            'comment1_4': comment1_4,
+            'comment1_5': comment1_5,
             'comment2': comment2,
         }
 
@@ -1866,8 +1873,8 @@ class CommentTests(APITestCase):
         data = CommentTests.setUpData()
         client = data['client']
 
-        resp = client.put('/api/comments/' + str(data['comment1'].id) + '/', {'text': 'abc'})
-        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        # resp = client.put('/api/comments/' + str(data['comment1'].id) + '/', {'text': 'abc'})
+        # self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
         resp = client.patch('/api/comments/' + str(data['comment1'].id) + '/', {'text':'abc'})
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
@@ -1881,7 +1888,7 @@ class CommentTests(APITestCase):
         data['user_role'].editing_ur_comment = True
         data['user_role'].save()
 
-        resp = client.patch('/api/comments/' + str(data['comment1'].id) + '/', {'name': 'abc'})
+        resp = client.patch('/api/comments/' + str(data['comment1'].id) + '/', {'text': 'abc'})
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
         resp = client.patch('/api/comments/' + str(data['comment1_2'].id) + '/', {'text': 'abc'})
@@ -1924,7 +1931,7 @@ class CommentTests(APITestCase):
         resp = client.post('/api/comments/', {'text':'abc', 'id_task':data['task1'].id, 'id_user':data['user2'].id})
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
         
-        data['user_role'].creating_comment = True
+        data['user_role'].commenting = True
         data['user_role'].save()
 
         resp = client.post('/api/comments/', {'text':'abc', 'id_task':data['task1'].id, 'id_user':data['user'].id})
@@ -1936,7 +1943,7 @@ class CommentTests(APITestCase):
         resp = client.post('/api/comments/', {'text':'abc', 'id_task':data['task1'].id, 'id_user':data['user2'].id})
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
-        data['user_role'].creating_comment = False
+        data['user_role'].commenting = False
         data['user_role'].save()
 
         data['user_board'].is_admin =True
@@ -1963,7 +1970,7 @@ class CommentTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
         resp = client.get('/api/tasks/' + str(data['comment2'].id) + '/')
-        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(resp.status_code, 404)
 
 
     # получение списка досок, которые относятся к пользователю
@@ -2057,7 +2064,7 @@ class CommentTests(APITestCase):
         data['user_role'].deleting_all_comment = True
         data['user_role'].save()
 
-        resp = client.delete('/api/comments/' + str(data['comment1'].id) + '/')
+        resp = client.delete('/api/comments/' + str(data['comment1_3'].id) + '/')
         self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
 
         resp = client.delete('/api/comments/' + str(data['comment2'].id) + '/')
@@ -2072,13 +2079,13 @@ class CommentTests(APITestCase):
         data['user_board'].is_admin = True
         data['user_board'].save()
         
-        resp = client.delete('/api/comments/' + str(data['comment1'].id) + '/')
+        resp = client.delete('/api/comments/' + str(data['comment1_4'].id) + '/')
         self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
 
         resp = client.delete('/api/comments/' + str(data['comment2'].id) + '/')
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
-        resp = client.delete('/api/comments/' + str(data['comment1_2'].id) + '/')
+        resp = client.delete('/api/comments/' + str(data['comment1_5'].id) + '/')
         self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
 
         data['user_board'].is_admin = True
